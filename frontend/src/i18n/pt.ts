@@ -331,7 +331,16 @@ export const pt: Dict = {
     newSubtitle: "Uma sala, armário, prateleira, caixa ou gaveta.",
     namePh: "ex.: Prateleira C, Gaveta 4",
     printLabel: "Imprimir a etiqueta",
+    printLabels: "Imprimir as etiquetas",
     create: "Criar local",
+    several: "Adicionar vários, numerados (ex.: Gaveta 1 a 30)",
+    baseNamePh: "ex.: Gaveta, Caixa",
+    from: "De",
+    to: "Até",
+    rangePreview: (first: string, last: string, n: number) =>
+      `${first} … ${last} · ${n} ${s(n, "local", "locais")}`,
+    createN: (n: number) => `Criar ${n} ${s(n, "local", "locais")}`,
+    createdN: (n: number) => `${n} ${s(n, "local criado", "locais criados")}`,
   },
 
   cats: {

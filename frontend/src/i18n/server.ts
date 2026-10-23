@@ -42,6 +42,8 @@ const exact: Record<string, string> = {
   "a location cannot be inside itself": "Um local não pode estar dentro de si próprio.",
   "a category cannot be inside itself": "Uma categoria não pode estar dentro de si própria.",
   "unknown parent category": "Categoria de cima desconhecida.",
+  "give a range of 1 to 100 numbers, lowest first":
+    "Indica de 1 a 100 números, do mais baixo para o mais alto.",
   "there is already a category with that name there": "Já existe ali uma categoria com esse nome.",
   // auth
   "This account has been disabled.": "Esta conta foi desativada.",

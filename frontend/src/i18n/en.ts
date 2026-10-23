@@ -328,7 +328,16 @@ export const en = {
     newSubtitle: "A room, cabinet, shelf, box or drawer.",
     namePh: "e.g. Shelf C, Gaveta 4",
     printLabel: "Print its label",
+    printLabels: "Print their labels",
     create: "Create place",
+    several: "Add several, numbered (e.g. Drawer 1 to 30)",
+    baseNamePh: "e.g. Drawer, Gaveta",
+    from: "From",
+    to: "To",
+    rangePreview: (first: string, last: string, n: number) =>
+      `${first} … ${last} · ${n} ${s(n, "place", "places")}`,
+    createN: (n: number) => `Create ${n} ${s(n, "place", "places")}`,
+    createdN: (n: number) => `Created ${n} ${s(n, "place", "places")}`,
   },
 
   cats: {

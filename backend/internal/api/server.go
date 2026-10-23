@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/locations", h(s.listLocations))
 	mux.Handle("GET /api/locations/counts", h(s.locationCounts))
 	mux.Handle("POST /api/locations", h(s.createLocation))
+	mux.Handle("POST /api/locations/range", h(s.createLocationRange))
 	mux.Handle("GET /api/locations/{id}", h(s.getLocation))
 	mux.Handle("PATCH /api/locations/{id}", h(s.updateLocation))
 	mux.Handle("DELETE /api/locations/{id}", h(s.deleteLocation))

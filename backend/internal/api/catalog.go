@@ -11,6 +11,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,6 +78,55 @@ func (s *Server) createLocation(w http.ResponseWriter, r *http.Request, u *auth.
 		s.enqueueLabel(r.Context(), u, codes.Location, loc.ID, loc.Name)
 	}
 	return writeJSON(w, loc)
+}
+
+// createLocationRange answers POST /api/locations/range: places named
+// "<name> <from>" to "<name> <to>" ("Gaveta 1" to "Gaveta 30"), all under
+// one parent, with their labels queued together.
+func (s *Server) createLocationRange(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	var b struct {
+		locationBody
+		From int `json:"from"`
+		To   int `json:"to"`
+	}
+	if err := decode(r, &b); err != nil {
+		return err
+	}
+	if err := b.validate(); err != nil {
+		return err
+	}
+	if b.From < 0 || b.To < b.From || b.To-b.From >= 100 {
+		return badRequest("give a range of 1 to 100 numbers, lowest first")
+	}
+	ctx := r.Context()
+	var locs []db.Location
+	err := s.store.Tx(ctx, func(tx *db.Queries) error {
+		for n := b.From; n <= b.To; n++ {
+			loc, err := tx.CreateLocation(ctx, db.CreateLocationParams{
+				ParentID: b.ParentID, Name: fmt.Sprintf("%s %d", b.Name, n), Description: b.Description,
+			})
+			if err != nil {
+				return err
+			}
+			locs = append(locs, loc)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if b.PrintLabel {
+		jobs := make([]db.CreatePrintJobParams, len(locs))
+		for i, l := range locs {
+			jobs[i] = db.CreatePrintJobParams{
+				Code: codes.Format(codes.Location, l.ID), Symbology: s.cfg.Symbology, Caption: s.defaultCaption(codes.Location, l.Name),
+			}
+		}
+		if _, err := s.queue.Enqueue(ctx, u.ID, jobs); err != nil {
+			slog.Error("enqueue labels", "places", len(locs), "err", err)
+		}
+	}
+	return writeJSON(w, locs)
 }
 
 // ancestors returns the path from the root to loc's parent.
