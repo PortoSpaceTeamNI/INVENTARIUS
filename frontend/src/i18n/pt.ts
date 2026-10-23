@@ -487,6 +487,12 @@ export const pt: Dict = {
     selectJob: (c: string) => `Selecionar ${c}`,
     reprintN: (n: number) => `Reimprimir ${n}`,
     clearSel: "Limpar seleção",
+    queue: "À espera de imprimir",
+    cancelAll: "Cancelar todas",
+    cancelN: (n: number) => `Cancelar ${n}`,
+    confirmCancel: (n: number) =>
+      `Cancelar ${n} ${s(n, "etiqueta", "etiquetas")}? Não ${s(n, "será impressa", "serão impressas")}.`,
+    cancelled: (n: number) => `${n} ${s(n, "etiqueta cancelada", "etiquetas canceladas")}`,
     pick: {
       title: "Imprimir etiquetas",
       subtitle: (place: string) => `Escolhe etiquetas de ${place}; saem juntas numa só tira.`,

@@ -197,6 +197,38 @@ func (s *Server) listPrintJobs(w http.ResponseWriter, r *http.Request, u *auth.U
 	return writeJSON(w, nonNil(jobs))
 }
 
+// printQueue answers GET /api/print/queue: every label still waiting,
+// oldest first.
+func (s *Server) printQueue(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	jobs, err := s.store.ListWaitingPrintJobs(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, nonNil(jobs))
+}
+
+// cancelPrints answers POST /api/print/cancel: cancels the waiting or failed
+// jobs in ids, or all of them when ids is left out.
+func (s *Server) cancelPrints(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	var b struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := decode(r, &b); err != nil {
+		return err
+	}
+	var n int64
+	var err error
+	if b.IDs == nil {
+		n, err = s.store.CancelAllPrintJobs(r.Context())
+	} else if len(b.IDs) > 0 {
+		n, err = s.store.CancelPrintJobs(r.Context(), b.IDs)
+	}
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, map[string]int64{"cancelled": n})
+}
+
 func (s *Server) printJobOp(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	id, err := pathID(r)
 	if err != nil {

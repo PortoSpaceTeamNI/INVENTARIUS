@@ -3,7 +3,7 @@ import { Printer } from "lucide-react";
 import { useState } from "react";
 import { api, type PrintLabel, type Symbology } from "../api";
 import { useT } from "../i18n";
-import { errorMessage, useMeta, usePrintHold } from "../lib";
+import { errorMessage, invalidatePrints, useMeta, usePrintHold } from "../lib";
 import { useToast } from "./ui";
 
 const DOTS_PER_MM = 180 / 25.4;
@@ -15,8 +15,7 @@ export function usePrint() {
   const { data: hold } = usePrintHold();
   return async (labels: PrintLabel[]) => {
     await api("POST", "/api/print", { labels });
-    qc.invalidateQueries({ queryKey: ["print-jobs"] });
-    qc.invalidateQueries({ queryKey: ["print-hold"] });
+    invalidatePrints(qc);
     return hold?.hold ?? false;
   };
 }

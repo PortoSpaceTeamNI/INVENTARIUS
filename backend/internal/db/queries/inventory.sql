@@ -225,6 +225,17 @@ SELECT * FROM print_jobs ORDER BY id DESC LIMIT ?;
 -- name: ListQueuedPrintJobs :many
 SELECT * FROM print_jobs WHERE status = 'queued' ORDER BY id LIMIT ?;
 
+-- name: ListWaitingPrintJobs :many
+-- The queue: labels not printed yet, and failed ones that need a decision.
+SELECT * FROM print_jobs WHERE status IN ('queued', 'printing', 'failed') ORDER BY id;
+
+-- name: CancelPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = ''
+WHERE status IN ('queued', 'failed') AND id IN (sqlc.slice(ids));
+
+-- name: CancelAllPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = '' WHERE status IN ('queued', 'failed');
+
 -- name: GetPrintJob :one
 SELECT * FROM print_jobs WHERE id = ?;
 

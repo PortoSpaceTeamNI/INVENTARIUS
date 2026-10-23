@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,41 @@ type AddTapeUsedParams struct {
 func (q *Queries) AddTapeUsed(ctx context.Context, arg AddTapeUsedParams) error {
 	_, err := q.db.ExecContext(ctx, addTapeUsed, arg.Dots, arg.ID)
 	return err
+}
+
+const cancelAllPrintJobs = `-- name: CancelAllPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = '' WHERE status IN ('queued', 'failed')
+`
+
+func (q *Queries) CancelAllPrintJobs(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelAllPrintJobs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const cancelPrintJobs = `-- name: CancelPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = ''
+WHERE status IN ('queued', 'failed') AND id IN (/*SLICE:ids*/?)
+`
+
+func (q *Queries) CancelPrintJobs(ctx context.Context, ids []int64) (int64, error) {
+	query := cancelPrintJobs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const closeLoan = `-- name: CloseLoan :exec
@@ -1469,6 +1505,45 @@ func (q *Queries) ListStockByLocation(ctx context.Context, locationID int64) ([]
 			&i.ItemDatasheetUrl,
 			&i.ItemPackage,
 			&i.Reserved,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWaitingPrintJobs = `-- name: ListWaitingPrintJobs :many
+SELECT id, created_at, user_id, code, symbology, caption, status, attempts, error, printed_at FROM print_jobs WHERE status IN ('queued', 'printing', 'failed') ORDER BY id
+`
+
+// The queue: labels not printed yet, and failed ones that need a decision.
+func (q *Queries) ListWaitingPrintJobs(ctx context.Context) ([]PrintJob, error) {
+	rows, err := q.db.QueryContext(ctx, listWaitingPrintJobs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrintJob
+	for rows.Next() {
+		var i PrintJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.Code,
+			&i.Symbology,
+			&i.Caption,
+			&i.Status,
+			&i.Attempts,
+			&i.Error,
+			&i.PrintedAt,
 		); err != nil {
 			return nil, err
 		}

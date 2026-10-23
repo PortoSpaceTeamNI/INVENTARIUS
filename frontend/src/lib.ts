@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import {
   ApiError,
   type AssetStatus,
@@ -31,6 +31,13 @@ export const usePrintHold = () =>
     // Faster while labels wait, so the count drops once they print.
     refetchInterval: (q) => (q.state.data?.waiting ? 3000 : 15_000),
   });
+
+/** Refreshes everything about printing after labels are queued, cancelled or printed. */
+export function invalidatePrints(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ["print-jobs"] });
+  qc.invalidateQueries({ queryKey: ["print-queue"] });
+  qc.invalidateQueries({ queryKey: ["print-hold"] });
+}
 
 export const useLocations = () =>
   useQuery({ queryKey: ["locations"], queryFn: () => get<Location[]>("/api/locations") });

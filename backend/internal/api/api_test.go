@@ -677,3 +677,29 @@ func TestSearchWithoutAccentsOrSymbols(t *testing.T) {
 		t.Fatalf("place search: %+v", res.Locations)
 	}
 }
+
+func TestPrintQueueCancel(t *testing.T) {
+	e := newEnv(t)
+	u := e.login("ana@portospaceteam.pt")
+	u.do("PUT", "/api/print/hold", map[string]bool{"hold": true}, 200, nil)
+	var locs []db.Location
+	u.do("POST", "/api/locations/range", map[string]any{"name": "Gaveta", "from": 1, "to": 4, "print_label": true}, 200, &locs)
+	var queue []db.PrintJob
+	u.do("GET", "/api/print/queue", nil, 200, &queue)
+	if len(queue) != 4 {
+		t.Fatalf("queue has %d jobs, want 4", len(queue))
+	}
+	var res struct{ Cancelled int64 }
+	u.do("POST", "/api/print/cancel", map[string]any{"ids": []int64{queue[0].ID, queue[1].ID}}, 200, &res)
+	if res.Cancelled != 2 {
+		t.Fatalf("cancelled %d, want 2", res.Cancelled)
+	}
+	u.do("POST", "/api/print/cancel", map[string]any{}, 200, &res)
+	if res.Cancelled != 2 {
+		t.Fatalf("cancel all: %d, want 2", res.Cancelled)
+	}
+	u.do("GET", "/api/print/queue", nil, 200, &queue)
+	if len(queue) != 0 {
+		t.Fatalf("queue still has %d jobs", len(queue))
+	}
+}

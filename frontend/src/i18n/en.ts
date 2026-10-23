@@ -481,6 +481,12 @@ export const en = {
     selectJob: (c: string) => `Select ${c}`,
     reprintN: (n: number) => `Reprint ${n}`,
     clearSel: "Clear selection",
+    queue: "Waiting to print",
+    cancelAll: "Cancel all",
+    cancelN: (n: number) => `Cancel ${n}`,
+    confirmCancel: (n: number) =>
+      `Cancel ${n} ${s(n, "label", "labels")}? ${s(n, "It", "They")} will not print.`,
+    cancelled: (n: number) => `Cancelled ${n} ${s(n, "label", "labels")}`,
     pick: {
       title: "Print labels",
       subtitle: (place: string) => `Pick labels from ${place}; they print together as one strip.`,

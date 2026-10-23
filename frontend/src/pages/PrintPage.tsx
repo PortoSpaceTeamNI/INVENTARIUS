@@ -7,7 +7,7 @@ import { usePrint } from "../components/LabelCard";
 import { Card, Empty, ErrorBox, Page, useToast } from "../components/ui";
 import { dict, useT } from "../i18n";
 import { serverText } from "../i18n/server";
-import { errorMessage, useMeta, usePrintHold, when } from "../lib";
+import { errorMessage, invalidatePrints, useMeta, usePrintHold, when } from "../lib";
 
 const statusBadge: Record<PrintJob["status"], string> = {
   queued: "",
@@ -32,10 +32,18 @@ export function PrintPage() {
     refetchInterval: (q) =>
       q.state.data?.some((j) => j.status === "queued" || j.status === "printing") ? 2000 : 15_000,
   });
+  const queue = useQuery({
+    queryKey: ["print-queue"],
+    queryFn: () => get<PrintJob[]>("/api/print/queue"),
+    refetchInterval: (q) =>
+      q.state.data?.some((j) => j.status === "queued" || j.status === "printing") ? 2000 : 15_000,
+  });
   const qc = useQueryClient();
   const toast = useToast();
   const t = useT();
   const sendToPrinter = usePrint();
+  // Waiting and failed labels are in the queue card; the rest is history.
+  const recent = (jobs.data ?? []).filter((j) => j.status === "done" || j.status === "cancelled");
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   function toggle(id: number) {
@@ -61,7 +69,7 @@ export function PrintPage() {
   async function jobOp(j: PrintJob, op: "retry" | "cancel") {
     try {
       await api("POST", `/api/print/jobs/${j.id}/${op}`);
-      qc.invalidateQueries({ queryKey: ["print-jobs"] });
+      invalidatePrints(qc);
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -80,10 +88,11 @@ export function PrintPage() {
       <div className="layout-2">
         <div className="stack" style={{ gap: "1.25rem" }}>
           <HoldCard />
+          <QueueCard jobs={queue.data} onOp={jobOp} />
           <BatchPrint />
           <Card
             title={t.print.recent}
-            count={jobs.data?.length}
+            count={recent.length}
             actions={
               selected.size > 0 && (
                 <>
@@ -101,69 +110,21 @@ export function PrintPage() {
               )
             }
           >
-            {jobs.data?.length === 0 ? (
+            {jobs.data && recent.length === 0 ? (
               <Empty icon={<Tag size={20} />} title={t.print.noneYet}>
                 {t.print.noneHint}
               </Empty>
             ) : (
               <div className="list">
-                {jobs.data?.map((j) => {
-                  const cls = statusBadge[j.status];
-                  const text = t.print.job[j.status];
-                  return (
-                    <div key={j.id} className="list-row">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(j.id)}
-                        onChange={() => toggle(j.id)}
-                        aria-label={t.print.selectJob(j.code)}
-                      />
-                      <img
-                        className="label-thumb"
-                        src={`/api/labels/${j.code}?symbology=${j.symbology}&caption=${encodeURIComponent(j.caption)}`}
-                        alt=""
-                        loading="lazy"
-                      />
-                      <div className="row-main">
-                        <div className="row-title">
-                          <Link to={`/c/${j.code}`} className="mono">
-                            {j.code}
-                          </Link>
-                          {j.caption && <span className="muted"> · {j.caption}</span>}
-                        </div>
-                        <div className="row-meta">
-                          <span>{symbolName(j.symbology)}</span>
-                          <span>{when(j.created_at)}</span>
-                          {j.error && <span className="text-danger">{serverText(j.error)}</span>}
-                        </div>
-                      </div>
-                      <span className={`badge ${cls}`}>{text}</span>
-                      {(j.status === "failed" || j.status === "cancelled" || j.status === "done") && (
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          onClick={() => jobOp(j, "retry")}
-                          title={j.status === "done" ? t.print.printAgain : t.print.tryAgain}
-                        >
-                          <RotateCcw size={14} />
-                          <span className="only-desktop">
-                            {j.status === "done" ? t.print.reprint : t.print.retry}
-                          </span>
-                        </button>
-                      )}
-                      {(j.status === "queued" || j.status === "failed") && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-ghost icon-btn"
-                          onClick={() => jobOp(j, "cancel")}
-                          aria-label={t.common.cancel}
-                        >
-                          <X size={15} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                {recent.map((j) => (
+                  <JobRow
+                    key={j.id}
+                    job={j}
+                    selected={selected.has(j.id)}
+                    onToggle={() => toggle(j.id)}
+                    onOp={jobOp}
+                  />
+                ))}
               </div>
             )}
           </Card>
@@ -227,6 +188,133 @@ export function PrintPage() {
         </div>
       </div>
     </Page>
+  );
+}
+
+type JobOp = (j: PrintJob, op: "retry" | "cancel") => void;
+
+/** Labels waiting to print (or that failed), oldest first, with ways to cancel them. */
+function QueueCard({ jobs, onOp }: { jobs: PrintJob[] | undefined; onOp: JobOp }) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
+  if (!jobs?.length) return null;
+  // Only labels still in the list can be picked (one may have just printed).
+  const picked = jobs.filter((j) => selected.has(j.id) && j.status !== "printing").map((j) => j.id);
+  const cancellable = jobs.filter((j) => j.status !== "printing").length;
+
+  async function cancel(ids?: number[]) {
+    const n = ids?.length ?? cancellable;
+    if (!confirm(t.print.confirmCancel(n))) return;
+    try {
+      const res = await api<{ cancelled: number }>("POST", "/api/print/cancel", ids ? { ids } : {});
+      toast(t.print.cancelled(res.cancelled));
+      setSelected(new Set());
+      invalidatePrints(qc);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  function toggle(id: number) {
+    const next = new Set(selected);
+    if (!next.delete(id)) next.add(id);
+    setSelected(next);
+  }
+
+  return (
+    <Card
+      title={t.print.queue}
+      count={jobs.length}
+      actions={
+        picked.length > 0 ? (
+          <>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setSelected(new Set())}>
+              {t.print.clearSel}
+            </button>
+            <button type="button" className="btn btn-sm btn-danger" onClick={() => cancel(picked)}>
+              <X size={14} /> {t.print.cancelN(picked.length)}
+            </button>
+          </>
+        ) : (
+          cancellable > 0 && (
+            <button type="button" className="btn btn-sm" onClick={() => cancel()}>
+              <X size={14} /> {t.print.cancelAll}
+            </button>
+          )
+        )
+      }
+    >
+      <div className="list">
+        {jobs.map((j) => (
+          <JobRow
+            key={j.id}
+            job={j}
+            selected={selected.has(j.id)}
+            onToggle={j.status === "printing" ? undefined : () => toggle(j.id)}
+            onOp={onOp}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function JobRow(props: { job: PrintJob; selected: boolean; onToggle?: () => void; onOp: JobOp }) {
+  const { job: j, onOp } = props;
+  const t = useT();
+  return (
+    <div className="list-row">
+      <input
+        type="checkbox"
+        checked={props.selected}
+        disabled={!props.onToggle}
+        onChange={props.onToggle}
+        aria-label={t.print.selectJob(j.code)}
+      />
+      <img
+        className="label-thumb"
+        src={`/api/labels/${j.code}?symbology=${j.symbology}&caption=${encodeURIComponent(j.caption)}`}
+        alt=""
+        loading="lazy"
+      />
+      <div className="row-main">
+        <div className="row-title">
+          <Link to={`/c/${j.code}`} className="mono">
+            {j.code}
+          </Link>
+          {j.caption && <span className="muted"> · {j.caption}</span>}
+        </div>
+        <div className="row-meta">
+          <span>{symbolName(j.symbology)}</span>
+          <span>{when(j.created_at)}</span>
+          {j.error && <span className="text-danger">{serverText(j.error)}</span>}
+        </div>
+      </div>
+      <span className={`badge ${statusBadge[j.status]}`}>{t.print.job[j.status]}</span>
+      {(j.status === "failed" || j.status === "cancelled" || j.status === "done") && (
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => onOp(j, "retry")}
+          title={j.status === "done" ? t.print.printAgain : t.print.tryAgain}
+        >
+          <RotateCcw size={14} />
+          <span className="only-desktop">{j.status === "done" ? t.print.reprint : t.print.retry}</span>
+        </button>
+      )}
+      {(j.status === "queued" || j.status === "failed") && (
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost icon-btn"
+          onClick={() => onOp(j, "cancel")}
+          aria-label={t.common.cancel}
+        >
+          <X size={15} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -303,8 +391,7 @@ function HoldCard() {
   async function run(fn: () => Promise<unknown>) {
     try {
       await fn();
-      qc.invalidateQueries({ queryKey: ["print-hold"] });
-      qc.invalidateQueries({ queryKey: ["print-jobs"] });
+      invalidatePrints(qc);
     } catch (e) {
       toast(errorMessage(e), "error");
     }

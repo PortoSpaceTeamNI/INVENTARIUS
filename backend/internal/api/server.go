@@ -114,6 +114,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/labels/{code}", h(s.labelPreview))
 	mux.Handle("POST /api/print", h(s.print))
 	mux.Handle("GET /api/print/jobs", h(s.listPrintJobs))
+	mux.Handle("GET /api/print/queue", h(s.printQueue))
+	mux.Handle("POST /api/print/cancel", h(s.cancelPrints))
 	mux.Handle("GET /api/print/hold", h(s.printHold))
 	mux.Handle("PUT /api/print/hold", h(s.printHold))
 	mux.Handle("POST /api/print/flush", h(s.flushPrints))
