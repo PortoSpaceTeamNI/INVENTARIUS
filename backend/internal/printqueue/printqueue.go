@@ -6,6 +6,8 @@ package printqueue
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -83,7 +85,9 @@ type Queue struct {
 
 	mu    sync.Mutex // serializes access to the printer
 	state PrinterState
-	smu   sync.Mutex // guards state
+	hold  bool       // keep jobs queued until Flush
+	flush bool       // print what is queued despite hold
+	smu   sync.Mutex // guards state, hold and flush
 }
 
 // New creates a queue. render turns a job into a label image for a tape.
@@ -93,6 +97,42 @@ func New(store *db.Store, p Printer, batchDelay time.Duration, render func(db.Pr
 		wake:  make(chan struct{}, 1),
 		state: PrinterState{Enabled: p != nil, Problems: []string{}},
 	}
+}
+
+const holdSetting = "print_hold"
+
+// Held reports whether labels are being kept until someone prints them.
+func (q *Queue) Held(ctx context.Context) (bool, error) {
+	v, err := q.store.GetSetting(ctx, holdSetting)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return v == "on", err
+}
+
+// SetHold keeps new labels queued (on), or prints them as they come (off),
+// starting with the ones that were held.
+func (q *Queue) SetHold(ctx context.Context, on bool) error {
+	v := "off"
+	if on {
+		v = "on"
+	}
+	if err := q.store.SetSetting(ctx, db.SetSettingParams{Key: holdSetting, Value: v}); err != nil {
+		return err
+	}
+	q.smu.Lock()
+	q.hold = on
+	q.smu.Unlock()
+	q.Wake()
+	return nil
+}
+
+// Flush prints every queued label now, as one strip, even while held.
+func (q *Queue) Flush() {
+	q.smu.Lock()
+	q.flush = true
+	q.smu.Unlock()
+	q.Wake()
 }
 
 // Enqueue adds jobs and wakes the worker.
@@ -130,6 +170,13 @@ func (q *Queue) Run(ctx context.Context) {
 	if err := q.store.RequeueInterruptedPrintJobs(ctx); err != nil {
 		slog.Error("requeue print jobs", "err", err)
 	}
+	held, err := q.Held(ctx)
+	if err != nil {
+		slog.Error("print hold setting", "err", err)
+	}
+	q.smu.Lock()
+	q.hold = held
+	q.smu.Unlock()
 	if q.printer == nil {
 		slog.Warn("no printer configured (INVENTARIUS_PRINTER); label jobs will stay queued")
 		return
@@ -146,6 +193,15 @@ func (q *Queue) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(q.batchDelay):
+		}
+		// A Flush from now on wakes the loop again, so none is lost.
+		q.smu.Lock()
+		flush := q.flush
+		q.flush = false
+		held := q.hold && !flush
+		q.smu.Unlock()
+		if held {
+			continue
 		}
 		for q.printBatch(ctx) {
 		}

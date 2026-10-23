@@ -257,3 +257,13 @@ UPDATE tape_rolls SET replaced_at = CURRENT_TIMESTAMP WHERE width_mm = ? AND rep
 
 -- name: AddTapeUsed :exec
 UPDATE tape_rolls SET used_dots = used_dots + sqlc.arg(dots) WHERE id = sqlc.arg(id);
+
+-- name: GetSetting :one
+SELECT value FROM settings WHERE key = ?;
+
+-- name: SetSetting :exec
+INSERT INTO settings (key, value) VALUES (?, ?)
+ON CONFLICT (key) DO UPDATE SET value = excluded.value;
+
+-- name: CountQueuedPrintJobs :one
+SELECT count(*) FROM print_jobs WHERE status = 'queued';

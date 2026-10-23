@@ -100,7 +100,9 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 		Labels []struct {
 			Code      string `json:"code"`
 			Symbology string `json:"symbology"`
-			Caption   string `json:"caption"`
+			// Caption left out: the usual one (a place's name, an item's
+			// label text); "" prints the code alone.
+			Caption *string `json:"caption"`
 		} `json:"labels"`
 	}
 	if err := decode(r, &b); err != nil {
@@ -124,8 +126,14 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 		if _, err := labels.ParseSymbology(l.Symbology); err != nil {
 			return badRequest(err.Error())
 		}
+		var caption string
+		if l.Caption != nil {
+			caption = strings.TrimSpace(*l.Caption)
+		} else {
+			caption = s.usualCaption(r.Context(), k, id)
+		}
 		jobs = append(jobs, db.CreatePrintJobParams{
-			Code: codes.Format(k, id), Symbology: l.Symbology, Caption: strings.TrimSpace(l.Caption),
+			Code: codes.Format(k, id), Symbology: l.Symbology, Caption: caption,
 		})
 	}
 	out, err := s.queue.Enqueue(r.Context(), u.ID, jobs)
@@ -133,6 +141,52 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 		return err
 	}
 	return writeJSON(w, out)
+}
+
+// usualCaption is the caption a label gets when printed without choosing
+// one, as when it is printed on creation.
+func (s *Server) usualCaption(ctx context.Context, k codes.Kind, id int64) string {
+	switch k {
+	case codes.Location:
+		if l, err := s.store.GetLocation(ctx, id); err == nil {
+			return s.defaultCaption(k, l.Name)
+		}
+	case codes.Item:
+		if it, err := s.store.GetItem(ctx, id); err == nil {
+			return s.defaultCaption(k, it.LabelText)
+		}
+	}
+	return ""
+}
+
+func (s *Server) printHold(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	if r.Method == http.MethodPut {
+		var b struct {
+			Hold bool `json:"hold"`
+		}
+		if err := decode(r, &b); err != nil {
+			return err
+		}
+		if err := s.queue.SetHold(r.Context(), b.Hold); err != nil {
+			return err
+		}
+	}
+	held, err := s.queue.Held(r.Context())
+	if err != nil {
+		return err
+	}
+	waiting, err := s.store.CountQueuedPrintJobs(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, map[string]any{"hold": held, "waiting": waiting})
+}
+
+// flushPrints prints every waiting label now, as one strip.
+func (s *Server) flushPrints(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	s.queue.Flush()
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (s *Server) listPrintJobs(w http.ResponseWriter, r *http.Request, u *auth.User) error {

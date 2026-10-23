@@ -60,6 +60,17 @@ func (q *Queries) CountLocationUsage(ctx context.Context, id *int64) (int64, err
 	return column_1, err
 }
 
+const countQueuedPrintJobs = `-- name: CountQueuedPrintJobs :one
+SELECT count(*) FROM print_jobs WHERE status = 'queued'
+`
+
+func (q *Queries) CountQueuedPrintJobs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countQueuedPrintJobs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTapeRolls = `-- name: CountTapeRolls :one
 SELECT count(*) FROM tape_rolls
 `
@@ -699,6 +710,17 @@ func (q *Queries) GetPrintJob(ctx context.Context, id int64) (PrintJob, error) {
 		&i.PrintedAt,
 	)
 	return i, err
+}
+
+const getSetting = `-- name: GetSetting :one
+SELECT value FROM settings WHERE key = ?
+`
+
+func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSetting, key)
+	var value string
+	err := row.Scan(&value)
+	return value, err
 }
 
 const getStock = `-- name: GetStock :one
@@ -1497,6 +1519,21 @@ func (q *Queries) SetPrintJobStatus(ctx context.Context, arg SetPrintJobStatusPa
 		arg.AttemptInc,
 		arg.ID,
 	)
+	return err
+}
+
+const setSetting = `-- name: SetSetting :exec
+INSERT INTO settings (key, value) VALUES (?, ?)
+ON CONFLICT (key) DO UPDATE SET value = excluded.value
+`
+
+type SetSettingParams struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (q *Queries) SetSetting(ctx context.Context, arg SetSettingParams) error {
+	_, err := q.db.ExecContext(ctx, setSetting, arg.Key, arg.Value)
 	return err
 }
 

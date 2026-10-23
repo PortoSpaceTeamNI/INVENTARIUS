@@ -391,6 +391,58 @@ func TestTapeRoll(t *testing.T) {
 	admin.do("POST", "/api/printer/tape", map[string]int{}, 400, nil)
 }
 
+func TestPrintHold(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("ana@portospaceteam.pt")
+	var hold struct {
+		Hold    bool `json:"hold"`
+		Waiting int  `json:"waiting"`
+	}
+	admin.do("PUT", "/api/print/hold", map[string]bool{"hold": true}, 200, &hold)
+	if !hold.Hold {
+		t.Fatal("hold not on")
+	}
+	var loc db.Location
+	admin.do("POST", "/api/locations", map[string]any{"name": "Armario 2"}, 200, &loc)
+	code := fmt.Sprintf("L%d", loc.ID)
+	// Labels sent one by one, further apart than the batch delay.
+	var jobs []db.PrintJob
+	for _, caption := range []any{nil, "", "Outro"} {
+		l := map[string]any{"code": code}
+		if caption != nil {
+			l["caption"] = caption
+		}
+		admin.do("POST", "/api/print", map[string]any{"labels": []any{l}}, 200, &jobs)
+		time.Sleep(120 * time.Millisecond)
+	}
+	if p := e.printer.printed(); len(p) != 0 {
+		t.Fatalf("printed %v while held", p)
+	}
+	admin.do("GET", "/api/print/hold", nil, 200, &hold)
+	if hold.Waiting != 3 {
+		t.Fatalf("%d waiting, want 3", hold.Waiting)
+	}
+	admin.do("GET", "/api/print/jobs", nil, 200, &jobs)
+	if jobs[2].Caption != "Armario 2" || jobs[1].Caption != "" || jobs[0].Caption != "Outro" {
+		t.Fatalf("captions %q %q %q", jobs[2].Caption, jobs[1].Caption, jobs[0].Caption)
+	}
+
+	admin.do("POST", "/api/print/flush", nil, 204, nil)
+	waitFor(t, "held labels printed", func() bool { return len(e.printer.printed()) > 0 })
+	if p := e.printer.printed(); len(p) != 1 || p[0] != 3 {
+		t.Fatalf("printed %v, want one job of 3", p)
+	}
+	// Still held afterwards.
+	admin.do("POST", "/api/print", map[string]any{"labels": []any{map[string]string{"code": code}}}, 200, nil)
+	time.Sleep(120 * time.Millisecond)
+	if p := e.printer.printed(); len(p) != 1 {
+		t.Fatalf("printed %v, want still one job", p)
+	}
+	// Turning hold off prints what was waiting.
+	admin.do("PUT", "/api/print/hold", map[string]bool{"hold": false}, 200, &hold)
+	waitFor(t, "printed after hold off", func() bool { return len(e.printer.printed()) == 2 })
+}
+
 func TestImport(t *testing.T) {
 	e := newEnv(t)
 	admin := e.login("ana@portospaceteam.pt")

@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer, RefreshCw, RotateCcw, Tag, X } from "lucide-react";
+import { Pause, Printer, RefreshCw, RotateCcw, Tag, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, get, type PrinterState, type PrintJob, type Symbology, type TapeRoll } from "../api";
+import { usePrint } from "../components/LabelCard";
 import { Card, Empty, ErrorBox, Page, useToast } from "../components/ui";
 import { dict, useT } from "../i18n";
 import { serverText } from "../i18n/server";
-import { errorMessage, useMeta, when } from "../lib";
+import { errorMessage, useMeta, usePrintHold, when } from "../lib";
 
 const statusBadge: Record<PrintJob["status"], string> = {
   queued: "",
@@ -34,6 +35,28 @@ export function PrintPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const t = useT();
+  const sendToPrinter = usePrint();
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  function toggle(id: number) {
+    const next = new Set(selected);
+    if (!next.delete(id)) next.add(id);
+    setSelected(next);
+  }
+
+  async function reprintSelected() {
+    // Oldest first, so the strip comes out in the order they were made.
+    const picked = (jobs.data ?? []).filter((j) => selected.has(j.id)).reverse();
+    try {
+      const held = await sendToPrinter(
+        picked.map((j) => ({ code: j.code, symbology: j.symbology, caption: j.caption })),
+      );
+      toast(held ? t.print.held(picked.length) : t.print.sent(picked.length));
+      setSelected(new Set());
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
 
   async function jobOp(j: PrintJob, op: "retry" | "cancel") {
     try {
@@ -56,8 +79,28 @@ export function PrintPage() {
     <Page title={t.print.title} subtitle={t.print.subtitle}>
       <div className="layout-2">
         <div className="stack" style={{ gap: "1.25rem" }}>
+          <HoldCard />
           <BatchPrint />
-          <Card title={t.print.recent} count={jobs.data?.length}>
+          <Card
+            title={t.print.recent}
+            count={jobs.data?.length}
+            actions={
+              selected.size > 0 && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    {t.print.clearSel}
+                  </button>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={reprintSelected}>
+                    <RotateCcw size={14} /> {t.print.reprintN(selected.size)}
+                  </button>
+                </>
+              )
+            }
+          >
             {jobs.data?.length === 0 ? (
               <Empty icon={<Tag size={20} />} title={t.print.noneYet}>
                 {t.print.noneHint}
@@ -69,6 +112,12 @@ export function PrintPage() {
                   const text = t.print.job[j.status];
                   return (
                     <div key={j.id} className="list-row">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(j.id)}
+                        onChange={() => toggle(j.id)}
+                        aria-label={t.print.selectJob(j.code)}
+                      />
                       <img
                         className="label-thumb"
                         src={`/api/labels/${j.code}?symbology=${j.symbology}&caption=${encodeURIComponent(j.caption)}`}
@@ -243,13 +292,68 @@ function TapeGauge({ roll }: { roll: TapeRoll }) {
   );
 }
 
+/** Hold labels so they print together, and print the waiting ones. */
+function HoldCard() {
+  const { data: hold } = usePrintHold();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
+  if (!hold) return null;
+
+  async function run(fn: () => Promise<unknown>) {
+    try {
+      await fn();
+      qc.invalidateQueries({ queryKey: ["print-hold"] });
+      qc.invalidateQueries({ queryKey: ["print-jobs"] });
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  return (
+    <Card>
+      <div className="card-pad stack" style={{ gap: "0.75rem" }}>
+        <label className="check" style={{ fontWeight: 600 }}>
+          <input
+            type="checkbox"
+            checked={hold.hold}
+            onChange={(e) => run(() => api("PUT", "/api/print/hold", { hold: e.target.checked }))}
+          />
+          <Pause size={15} /> {t.print.hold}
+        </label>
+        <p className="small muted">{t.print.holdHint}</p>
+        {hold.hold && (
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span className={hold.waiting ? "" : "muted"}>
+              {hold.waiting ? t.print.waiting(hold.waiting) : t.print.noneWaiting}
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!hold.waiting}
+              onClick={() =>
+                run(async () => {
+                  await api("POST", "/api/print/flush");
+                  toast(t.print.printingWaiting(hold.waiting));
+                })
+              }
+            >
+              <Printer size={15} /> {t.print.printNow}
+            </button>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /** Print several codes at once, e.g. "L1-L20" for a new shelf of drawers. */
 function BatchPrint() {
   const { data: meta } = useMeta();
   const [text, setText] = useState("");
   const [sym, setSym] = useState<Symbology | "">("");
   const [error, setError] = useState<unknown>(null);
-  const qc = useQueryClient();
+  const sendToPrinter = usePrint();
   const toast = useToast();
   const t = useT();
 
@@ -258,12 +362,9 @@ function BatchPrint() {
     setError(null);
     try {
       const codes = expandCodes(text);
-      await api("POST", "/api/print", {
-        labels: codes.map((code) => ({ code, symbology: sym || meta?.symbology })),
-      });
-      toast(t.print.sent(codes.length));
+      const held = await sendToPrinter(codes.map((code) => ({ code, symbology: sym || meta?.symbology })));
+      toast(held ? t.print.held(codes.length) : t.print.sent(codes.length));
       setText("");
-      qc.invalidateQueries({ queryKey: ["print-jobs"] });
     } catch (err) {
       setError(err);
     }

@@ -8,6 +8,7 @@ import {
   type Location,
   type Meta,
   type Owned,
+  type PrintHold,
   type Stock,
   type User,
 } from "./api";
@@ -21,6 +22,14 @@ export const useMeta = () =>
     queryKey: ["meta"],
     queryFn: () => get<Meta>("/api/meta"),
     staleTime: Number.POSITIVE_INFINITY,
+  });
+
+export const usePrintHold = () =>
+  useQuery({
+    queryKey: ["print-hold"],
+    queryFn: () => get<PrintHold>("/api/print/hold"),
+    // Faster while labels wait, so the count drops once they print.
+    refetchInterval: (q) => (q.state.data?.waiting ? 3000 : 15_000),
   });
 
 export const useLocations = () =>

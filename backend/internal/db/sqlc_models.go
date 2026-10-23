@@ -135,6 +135,11 @@ type Session struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+type Setting struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type Stock struct {
 	ID                int64      `json:"id"`
 	ItemID            int64      `json:"item_id"`

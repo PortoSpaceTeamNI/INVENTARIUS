@@ -208,6 +208,19 @@ export interface PrintJob {
   printed_at: string | null;
 }
 
+export interface PrintHold {
+  hold: boolean;
+  /** Labels queued and not yet printed. */
+  waiting: number;
+}
+
+/** A label to print; caption left out means its usual one. */
+export interface PrintLabel {
+  code: string;
+  symbology?: Symbology;
+  caption?: string;
+}
+
 export interface PrinterState {
   enabled: boolean;
   model?: string;
