@@ -47,6 +47,13 @@ job are half-cut, so they come out as a strip that is easy to peel, with one ful
 end. To label a whole shelf at once, use *Labels → Print several labels* with a range like
 `L4-L20`.
 
+**Tape left:** the printer cannot report how much tape a TZe cassette has left, so the app
+estimates it. It adds up the tape every job uses (lead-in, labels, margins) and shows what is
+left on the **Labels** page. Each width (12 or 24 mm) has its own count, so cassettes can be
+swapped. When you put in a **new** cassette, press *New tape loaded* and choose its length
+(standard TZe: 8 m). Labels printed from the printer's own keyboard are not counted. The
+first cassette counted also includes every label the app printed before this existed.
+
 ## First print checklist
 
 The protocol code is tested against the spec, but it has not yet run on our printer. On

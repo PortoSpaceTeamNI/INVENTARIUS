@@ -149,6 +149,15 @@ type Stock struct {
 	CountState        string     `json:"count_state"`
 }
 
+type TapeRoll struct {
+	ID         int64      `json:"id"`
+	WidthMm    int64      `json:"width_mm"`
+	LengthMm   int64      `json:"length_mm"`
+	UsedDots   int64      `json:"used_dots"`
+	LoadedAt   time.Time  `json:"loaded_at"`
+	ReplacedAt *time.Time `json:"replaced_at"`
+}
+
 type User struct {
 	ID        int64     `json:"id"`
 	Email     string    `json:"email"`

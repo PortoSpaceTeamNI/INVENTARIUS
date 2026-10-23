@@ -1877,6 +1877,10 @@ dialog.sheet::backdrop {
   background: var(--warn);
 }
 
+.meter .low {
+  background: var(--danger);
+}
+
 .legend {
   display: flex;
   gap: 1rem;

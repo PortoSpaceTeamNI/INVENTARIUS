@@ -419,6 +419,16 @@ export const en = {
     tape: "Tape",
     tapeNeed: " · labels need 12 or 24 mm",
     checked: "Checked",
+    tapeLeft: "Tape left",
+    tapeLeftOf: (left: string, total: string, pct: number) => `≈ ${left} of ${total} (${pct}%)`,
+    tapeLow: "Running low: keep a spare cassette at hand.",
+    tapeSince: (d: string) =>
+      `Estimated from the labels printed by the app since this cassette was loaded (${d}). Labels printed from the printer's keyboard are not counted.`,
+    newTape: "New tape loaded",
+    newTapeLength: "Length of the new cassette",
+    newTapeStd: "8 m (standard TZe)",
+    newTapeConfirm: (mm: number) => `Start counting a new, full ${mm} mm cassette?`,
+    newTapeDone: "Counting the new cassette from full",
     batchNote:
       "Labels created within a few seconds of each other print together as one strip, so less tape is wasted.",
     sent: (n: number) => `${n} ${s(n, "label", "labels")} sent to the printer`,

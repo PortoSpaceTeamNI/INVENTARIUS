@@ -12,6 +12,7 @@ import (
 	"inventarius/internal/codes"
 	"inventarius/internal/db"
 	"inventarius/internal/labels"
+	"inventarius/internal/printqueue"
 )
 
 // RenderJob turns a stored print job into a label image for the loaded
@@ -177,5 +178,37 @@ func (s *Server) printJobOp(w http.ResponseWriter, r *http.Request, u *auth.User
 }
 
 func (s *Server) printerStatus(w http.ResponseWriter, r *http.Request, u *auth.User) error {
-	return writeJSON(w, s.queue.CheckStatus(r.Context()))
+	st := s.queue.CheckStatus(r.Context())
+	roll, err := s.queue.Roll(r.Context(), st.TapeMM)
+	if err != nil {
+		return err
+	}
+	st.TapeRoll = roll
+	return writeJSON(w, st)
+}
+
+// newTapeRoll records that a new cassette was put in the printer, so the
+// tape left is counted from its full length again.
+func (s *Server) newTapeRoll(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	var b struct {
+		LengthMM int `json:"length_mm"`
+	}
+	if err := decode(r, &b); err != nil {
+		return err
+	}
+	if b.LengthMM == 0 {
+		b.LengthMM = printqueue.DefaultRollMM
+	}
+	if b.LengthMM < 500 || b.LengthMM > 50000 {
+		return badRequest("tape length must be between 0.5 and 50 m")
+	}
+	width := s.queue.CheckStatus(r.Context()).TapeMM
+	if _, err := labels.TapeFor(width); err != nil {
+		return badRequest("load 12 or 24 mm tape in the printer first")
+	}
+	roll, err := s.queue.NewRoll(r.Context(), width, b.LengthMM)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, roll)
 }

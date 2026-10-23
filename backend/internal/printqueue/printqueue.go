@@ -69,6 +69,8 @@ type PrinterState struct {
 	Error     string    `json:"error,omitempty"`
 	CheckedAt time.Time `json:"checked_at"`
 	Busy      bool      `json:"busy"`
+	// TapeRoll estimates the tape left in the loaded cassette.
+	TapeRoll *TapeRoll `json:"tape_roll,omitempty"`
 }
 
 type Queue struct {
@@ -183,6 +185,13 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 		return false
 	}
 
+	// Before the jobs are marked done, so the first cassette's count of
+	// earlier labels leaves them out.
+	roll, rollErr := q.rollFor(ctx, tape)
+	if rollErr != nil {
+		slog.Error("tape roll", "err", rollErr)
+	}
+
 	var imgs []image.Image
 	var ok []db.PrintJob
 	for _, j := range jobs {
@@ -211,6 +220,11 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 		slog.Warn("print failed", "labels", len(ok), "err", err)
 	} else {
 		slog.Info("printed labels", "count", len(ok), "confirmed", res.Confirmed)
+		if rollErr == nil {
+			if err := q.store.AddTapeUsed(ctx, db.AddTapeUsedParams{Dots: jobDots(imgs), ID: roll.ID}); err != nil {
+				slog.Error("count tape used", "err", err)
+			}
+		}
 	}
 	for _, j := range ok {
 		q.setJob(ctx, j.ID, status, msg)

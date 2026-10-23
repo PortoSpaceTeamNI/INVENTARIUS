@@ -23,6 +23,8 @@ const exact: Record<string, string> = {
   "the due time is in the past": "A data de devolução já passou.",
   "the CSV has no rows": "O CSV não tem linhas.",
   "send between 1 and 200 labels": "Envia entre 1 e 200 etiquetas.",
+  "tape length must be between 0.5 and 50 m": "O comprimento da fita tem de estar entre 0,5 e 50 m.",
+  "load 12 or 24 mm tape in the printer first": "Coloca primeiro fita de 12 ou 24 mm na impressora.",
   "photo too large (max 20 MB)": "Foto demasiado grande (máx. 20 MB).",
   "only waiting jobs can be cancelled": "Só se podem cancelar impressões em espera.",
   "only finished jobs can be retried": "Só se podem repetir impressões terminadas.",

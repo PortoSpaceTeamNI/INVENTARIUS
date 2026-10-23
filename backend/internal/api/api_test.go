@@ -329,6 +329,68 @@ func TestPrintFollowsLoadedTape(t *testing.T) {
 	}
 }
 
+func TestTapeRoll(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("ana@portospaceteam.pt")
+	ctx := context.Background()
+	// Two labels printed before tape was tracked, as one job.
+	for _, code := range []string{"L1", "L2"} {
+		j, err := e.store.CreatePrintJob(ctx, db.CreatePrintJobParams{UserID: 1, Code: code, Symbology: "datamatrix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.store.SetPrintJobStatus(ctx, db.SetPrintJobStatusParams{Status: "done", ID: j.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	roll := func() printqueue.TapeRoll {
+		t.Helper()
+		var st printqueue.PrinterState
+		admin.do("GET", "/api/printer", nil, 200, &st)
+		if st.TapeRoll == nil {
+			t.Fatal("no tape roll")
+		}
+		return *st.TapeRoll
+	}
+	setTape := func(mm int) {
+		e.printer.mu.Lock()
+		e.printer.tapeMM = mm
+		e.printer.mu.Unlock()
+	}
+
+	// Lead-in (24.5 mm) plus two ~26 mm labels.
+	before := roll()
+	if before.WidthMM != 12 || before.LengthMM != printqueue.DefaultRollMM || before.UsedMM < 55 || before.UsedMM > 90 {
+		t.Fatalf("first roll %+v, want ~65 mm of 8 m used", before)
+	}
+
+	admin.do("POST", "/api/locations", map[string]any{"name": "Shelf", "print_label": true}, 200, nil)
+	waitFor(t, "tape counted", func() bool { return roll().UsedMM > before.UsedMM })
+	if d := roll().UsedMM - before.UsedMM; d < 40 || d > 65 {
+		t.Fatalf("one label used %d mm, want ~50", d)
+	}
+
+	// Another width is another cassette, which starts full; the 12 mm one is kept.
+	setTape(24)
+	if r := roll(); r.WidthMM != 24 || r.UsedMM != 0 {
+		t.Fatalf("24 mm roll %+v", r)
+	}
+	setTape(12)
+	used := roll().UsedMM
+	if used <= before.UsedMM {
+		t.Fatalf("12 mm roll lost its count: %d", used)
+	}
+
+	var r printqueue.TapeRoll
+	admin.do("POST", "/api/printer/tape", map[string]int{"length_mm": 5000}, 200, &r)
+	if r.WidthMM != 12 || r.LengthMM != 5000 || r.UsedMM != 0 || roll() != r {
+		t.Fatalf("new roll %+v, current %+v", r, roll())
+	}
+	admin.do("POST", "/api/printer/tape", map[string]int{"length_mm": 100}, 400, nil)
+	setTape(18)
+	admin.do("POST", "/api/printer/tape", map[string]int{}, 400, nil)
+}
+
 func TestImport(t *testing.T) {
 	e := newEnv(t)
 	admin := e.login("ana@portospaceteam.pt")

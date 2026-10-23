@@ -216,6 +216,15 @@ export interface PrinterState {
   error?: string;
   checked_at: string;
   busy: boolean;
+  /** Estimate for the loaded cassette, counted from what the app printed. */
+  tape_roll?: TapeRoll;
+}
+
+export interface TapeRoll {
+  width_mm: number;
+  length_mm: number;
+  used_mm: number;
+  loaded_at: string;
 }
 
 export interface LocationDetail {

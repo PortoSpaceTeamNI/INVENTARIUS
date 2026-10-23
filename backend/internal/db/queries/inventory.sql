@@ -239,3 +239,21 @@ SELECT locations.id,
     CAST((SELECT count(*) FROM stock s WHERE s.location_id = locations.id) AS INTEGER) AS stock_count,
     CAST((SELECT count(*) FROM assets a WHERE a.location_id = locations.id) AS INTEGER) AS asset_count
 FROM locations;
+
+-- name: ListDonePrintJobs :many
+SELECT * FROM print_jobs WHERE status = 'done' ORDER BY printed_at, id;
+
+-- name: CountTapeRolls :one
+SELECT count(*) FROM tape_rolls;
+
+-- name: GetCurrentTapeRoll :one
+SELECT * FROM tape_rolls WHERE width_mm = ? AND replaced_at IS NULL ORDER BY id DESC LIMIT 1;
+
+-- name: CreateTapeRoll :one
+INSERT INTO tape_rolls (width_mm, length_mm, used_dots) VALUES (?, ?, ?) RETURNING *;
+
+-- name: ReplaceTapeRolls :exec
+UPDATE tape_rolls SET replaced_at = CURRENT_TIMESTAMP WHERE width_mm = ? AND replaced_at IS NULL;
+
+-- name: AddTapeUsed :exec
+UPDATE tape_rolls SET used_dots = used_dots + sqlc.arg(dots) WHERE id = sqlc.arg(id);

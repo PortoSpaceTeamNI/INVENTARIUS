@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, RefreshCw, RotateCcw, Tag, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, get, type PrinterState, type PrintJob, type Symbology } from "../api";
+import { api, get, type PrinterState, type PrintJob, type Symbology, type TapeRoll } from "../api";
 import { Card, Empty, ErrorBox, Page, useToast } from "../components/ui";
 import { dict, useT } from "../i18n";
 import { serverText } from "../i18n/server";
@@ -171,12 +171,75 @@ export function PrintPage() {
                   <dd>{when(p.checked_at)}</dd>
                 </dl>
               )}
+              {p?.tape_roll && <TapeGauge roll={p.tape_roll} />}
               <p className="small muted">{t.print.batchNote}</p>
             </div>
           </Card>
         </div>
       </div>
     </Page>
+  );
+}
+
+const meters = (mm: number) => `${(mm / 1000).toLocaleString(dict().locale, { maximumFractionDigits: 1 })} m`;
+
+/** How much tape is left in the cassette, and a way to start a new one. */
+function TapeGauge({ roll }: { roll: TapeRoll }) {
+  const [length, setLength] = useState(8000);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
+  const left = Math.max(0, roll.length_mm - roll.used_mm);
+  const pct = Math.round((100 * left) / roll.length_mm);
+
+  async function newTape() {
+    if (!confirm(t.print.newTapeConfirm(roll.width_mm))) return;
+    try {
+      await api("POST", "/api/printer/tape", { length_mm: length });
+      toast(t.print.newTapeDone);
+      qc.invalidateQueries({ queryKey: ["printer"] });
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: "0.5rem" }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <span className="small muted">{t.print.tapeLeft}</span>
+        <span className={`small ${pct <= 10 ? "text-danger" : pct <= 25 ? "text-warn" : ""}`}>
+          {t.print.tapeLeftOf(meters(left), meters(roll.length_mm), pct)}
+        </span>
+      </div>
+      <div
+        className="meter"
+        role="meter"
+        aria-label={t.print.tapeLeft}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+      >
+        <span className={pct <= 10 ? "low" : pct <= 25 ? "reserved" : "free"} style={{ width: `${pct}%` }} />
+      </div>
+      {pct <= 25 && <p className="small text-warn">{t.print.tapeLow}</p>}
+      <p className="small muted">{t.print.tapeSince(when(roll.loaded_at))}</p>
+      <div className="row" style={{ flexWrap: "nowrap" }}>
+        <select
+          value={length}
+          onChange={(e) => setLength(Number(e.target.value))}
+          aria-label={t.print.newTapeLength}
+        >
+          <option value={8000}>{t.print.newTapeStd}</option>
+          <option value={5000}>5 m</option>
+          <option value={4000}>4 m</option>
+          <option value={3000}>3 m</option>
+          <option value={1500}>{meters(1500)}</option>
+        </select>
+        <button type="button" className="btn btn-sm" onClick={newTape}>
+          <RotateCcw size={14} /> {t.print.newTape}
+        </button>
+      </div>
+    </div>
   );
 }
 

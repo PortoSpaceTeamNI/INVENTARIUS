@@ -10,6 +10,20 @@ import (
 	"time"
 )
 
+const addTapeUsed = `-- name: AddTapeUsed :exec
+UPDATE tape_rolls SET used_dots = used_dots + ?1 WHERE id = ?2
+`
+
+type AddTapeUsedParams struct {
+	Dots int64 `json:"dots"`
+	ID   int64 `json:"id"`
+}
+
+func (q *Queries) AddTapeUsed(ctx context.Context, arg AddTapeUsedParams) error {
+	_, err := q.db.ExecContext(ctx, addTapeUsed, arg.Dots, arg.ID)
+	return err
+}
+
 const closeLoan = `-- name: CloseLoan :exec
 UPDATE loans SET returned_at = CURRENT_TIMESTAMP WHERE id = ?
 `
@@ -44,6 +58,17 @@ func (q *Queries) CountLocationUsage(ctx context.Context, id *int64) (int64, err
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const countTapeRolls = `-- name: CountTapeRolls :one
+SELECT count(*) FROM tape_rolls
+`
+
+func (q *Queries) CountTapeRolls(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTapeRolls)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createAsset = `-- name: CreateAsset :one
@@ -357,6 +382,30 @@ func (q *Queries) CreateStock(ctx context.Context, arg CreateStockParams) (Stock
 	return i, err
 }
 
+const createTapeRoll = `-- name: CreateTapeRoll :one
+INSERT INTO tape_rolls (width_mm, length_mm, used_dots) VALUES (?, ?, ?) RETURNING id, width_mm, length_mm, used_dots, loaded_at, replaced_at
+`
+
+type CreateTapeRollParams struct {
+	WidthMm  int64 `json:"width_mm"`
+	LengthMm int64 `json:"length_mm"`
+	UsedDots int64 `json:"used_dots"`
+}
+
+func (q *Queries) CreateTapeRoll(ctx context.Context, arg CreateTapeRollParams) (TapeRoll, error) {
+	row := q.db.QueryRowContext(ctx, createTapeRoll, arg.WidthMm, arg.LengthMm, arg.UsedDots)
+	var i TapeRoll
+	err := row.Scan(
+		&i.ID,
+		&i.WidthMm,
+		&i.LengthMm,
+		&i.UsedDots,
+		&i.LoadedAt,
+		&i.ReplacedAt,
+	)
+	return i, err
+}
+
 const deleteAsset = `-- name: DeleteAsset :exec
 DELETE FROM assets WHERE id = ?
 `
@@ -538,6 +587,24 @@ func (q *Queries) GetAsset(ctx context.Context, id int64) (Asset, error) {
 		&i.OwnerDepartmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCurrentTapeRoll = `-- name: GetCurrentTapeRoll :one
+SELECT id, width_mm, length_mm, used_dots, loaded_at, replaced_at FROM tape_rolls WHERE width_mm = ? AND replaced_at IS NULL ORDER BY id DESC LIMIT 1
+`
+
+func (q *Queries) GetCurrentTapeRoll(ctx context.Context, widthMm int64) (TapeRoll, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentTapeRoll, widthMm)
+	var i TapeRoll
+	err := row.Scan(
+		&i.ID,
+		&i.WidthMm,
+		&i.LengthMm,
+		&i.UsedDots,
+		&i.LoadedAt,
+		&i.ReplacedAt,
 	)
 	return i, err
 }
@@ -765,6 +832,44 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 	for rows.Next() {
 		var i Category
 		if err := rows.Scan(&i.ID, &i.ParentID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDonePrintJobs = `-- name: ListDonePrintJobs :many
+SELECT id, created_at, user_id, code, symbology, caption, status, attempts, error, printed_at FROM print_jobs WHERE status = 'done' ORDER BY printed_at, id
+`
+
+func (q *Queries) ListDonePrintJobs(ctx context.Context) ([]PrintJob, error) {
+	rows, err := q.db.QueryContext(ctx, listDonePrintJobs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrintJob
+	for rows.Next() {
+		var i PrintJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.Code,
+			&i.Symbology,
+			&i.Caption,
+			&i.Status,
+			&i.Attempts,
+			&i.Error,
+			&i.PrintedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1320,6 +1425,15 @@ func (q *Queries) ListStockByLocation(ctx context.Context, locationID int64) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const replaceTapeRolls = `-- name: ReplaceTapeRolls :exec
+UPDATE tape_rolls SET replaced_at = CURRENT_TIMESTAMP WHERE width_mm = ? AND replaced_at IS NULL
+`
+
+func (q *Queries) ReplaceTapeRolls(ctx context.Context, widthMm int64) error {
+	_, err := q.db.ExecContext(ctx, replaceTapeRolls, widthMm)
+	return err
 }
 
 const requeueInterruptedPrintJobs = `-- name: RequeueInterruptedPrintJobs :exec

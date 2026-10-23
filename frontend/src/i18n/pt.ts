@@ -425,6 +425,16 @@ export const pt: Dict = {
     tape: "Fita",
     tapeNeed: " · as etiquetas precisam de 12 ou 24 mm",
     checked: "Verificada",
+    tapeLeft: "Fita restante",
+    tapeLeftOf: (left: string, total: string, pct: number) => `≈ ${left} de ${total} (${pct}%)`,
+    tapeLow: "Está a acabar: tem uma cassete de reserva à mão.",
+    tapeSince: (d: string) =>
+      `Estimativa a partir das etiquetas impressas pela app desde que esta cassete foi colocada (${d}). As impressas no teclado da impressora não contam.`,
+    newTape: "Fita nova colocada",
+    newTapeLength: "Comprimento da cassete nova",
+    newTapeStd: "8 m (TZe normal)",
+    newTapeConfirm: (mm: number) => `Começar a contar uma cassete nova e cheia de ${mm} mm?`,
+    newTapeDone: "A contar a cassete nova desde cheia",
     batchNote:
       "As etiquetas criadas com poucos segundos de diferença saem juntas numa só tira, para gastar menos fita.",
     sent: (n: number) => `${n} ${s(n, "etiqueta enviada", "etiquetas enviadas")} para a impressora`,
