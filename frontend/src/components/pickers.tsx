@@ -1,6 +1,8 @@
 import { useMemo } from "react";
+import type { Category } from "../api";
 import { useT } from "../i18n";
 import { locationPaths, useLocations, useMeta } from "../lib";
+import { categoryPaths } from "../pages/ItemsPage";
 
 /** Encodes team / project / department as "", "p:<id>", "d:<id>". */
 export function ownerValue(projectId: number | null, departmentId: number | null): string {
@@ -69,6 +71,41 @@ export function LocationSelect(props: {
       onChange={(e) => props.onChange(e.target.value ? Number(e.target.value) : null)}
     >
       <option value="">{props.emptyLabel ?? t.common.chooseLocation}</option>
+      {sorted.map(([id, path]) => (
+        <option key={id} value={id}>
+          {path}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Select for a parent category; leaves out `exclude` and everything inside it. */
+export function CategorySelect(props: {
+  cats: Category[] | undefined;
+  value: number | null;
+  onChange: (id: number | null) => void;
+  emptyLabel: string;
+  exclude?: number;
+  id?: string;
+}) {
+  const sorted = useMemo(() => {
+    const byId = new Map((props.cats ?? []).map((c) => [c.id, c]));
+    const inside = (c: Category | undefined, d = 0): boolean =>
+      !!c &&
+      d < 32 &&
+      (c.id === props.exclude || inside(c.parent_id ? byId.get(c.parent_id) : undefined, d + 1));
+    return [...categoryPaths(props.cats).entries()]
+      .filter(([id]) => props.exclude === undefined || !inside(byId.get(id)))
+      .sort((a, b) => a[1].localeCompare(b[1]));
+  }, [props.cats, props.exclude]);
+  return (
+    <select
+      id={props.id}
+      value={props.value ?? ""}
+      onChange={(e) => props.onChange(e.target.value ? Number(e.target.value) : null)}
+    >
+      <option value="">{props.emptyLabel}</option>
       {sorted.map(([id, path]) => (
         <option key={id} value={id}>
           {path}

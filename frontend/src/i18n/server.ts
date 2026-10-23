@@ -41,6 +41,8 @@ const exact: Record<string, string> = {
   "at most 5000 rows per import": "No máximo 5000 linhas por importação.",
   "a location cannot be inside itself": "Um local não pode estar dentro de si próprio.",
   "a category cannot be inside itself": "Uma categoria não pode estar dentro de si própria.",
+  "unknown parent category": "Categoria de cima desconhecida.",
+  "there is already a category with that name there": "Já existe ali uma categoria com esse nome.",
   // auth
   "This account has been disabled.": "Esta conta foi desativada.",
   "Login expired, try again.": "O login expirou, tenta outra vez.",

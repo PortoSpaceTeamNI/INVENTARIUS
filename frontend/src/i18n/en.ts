@@ -67,6 +67,7 @@ export const en = {
     import: "Import",
     admin: "Admin",
     people: "People",
+    categories: "Categories",
     searchHint: "Search items, parts, places…",
     profile: "Your profile",
     breadcrumb: "Breadcrumb",
@@ -328,6 +329,32 @@ export const en = {
     namePh: "e.g. Shelf C, Gaveta 4",
     printLabel: "Print its label",
     create: "Create place",
+  },
+
+  cats: {
+    title: "Categories",
+    subtitle: (cats: number, items: number) =>
+      `${cats} ${s(cats, "category", "categories")} · ${items} ${s(items, "item", "items")} sorted`,
+    newCategory: "New category",
+    find: "Find a category…",
+    noneYet: "No categories yet",
+    noneHint: "Group items by what they are: Electronics, Fasteners, Tools…",
+    nSub: (n: number) => `${n} ${s(n, "subcategory", "subcategories")} · `,
+    showItems: "Show its items",
+    addSub: "Add subcategory",
+    edit: "Rename or move",
+    delete: "Delete category",
+    newSubtitle: "Items can be filed under it and found by its name.",
+    editSubtitle: "Its subcategories and items move with it.",
+    namePh: "e.g. Fasteners, Connectors",
+    topLevel: "Nothing (top level)",
+    create: "Create category",
+    created: (n: string) => `Created ${n}`,
+    saved: (n: string) => `Saved ${n}`,
+    confirmDelete: (n: string) => `Delete the category ${n}?`,
+    notEmpty: (subs: number, items: number) =>
+      `Empty it first: it still has ${[subs && `${subs} ${s(subs, "subcategory", "subcategories")}`, items && `${items} ${s(items, "item", "items")}`].filter(Boolean).join(" and ")}.`,
+    deleted: (n: string) => `Deleted ${n}`,
   },
 
   loc: {

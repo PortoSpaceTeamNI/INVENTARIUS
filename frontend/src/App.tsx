@@ -8,6 +8,7 @@ import {
   ScanLine,
   Search,
   Settings,
+  Tag,
   Users,
   Wrench,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { BrandMark, Loading } from "./components/ui";
 import { LangToggle, useT } from "./i18n";
 import { useMe, usePrintHold } from "./lib";
 import { AssetPage } from "./pages/AssetPage";
+import { CategoriesPage } from "./pages/CategoriesPage";
 import { CodePage } from "./pages/CodePage";
 import { HomePage } from "./pages/HomePage";
 import { ImportPage } from "./pages/ImportPage";
@@ -49,6 +51,7 @@ export function App() {
         <Route path="/items/new" element={<ItemEditPage />} />
         <Route path="/items/:id" element={<ItemPage />} />
         <Route path="/items/:id/edit" element={<ItemEditPage />} />
+        <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/stock/:id" element={<StockPage />} />
         <Route path="/assets/:id" element={<AssetPage />} />
         <Route path="/loans" element={<LoansPage />} />
@@ -177,6 +180,9 @@ function Sidebar({ me }: { me: User }) {
         </NavLink>
         <NavLink to="/locations">
           <MapPin size={17} /> {t.nav.locations}
+        </NavLink>
+        <NavLink to="/categories">
+          <Tag size={17} /> {t.nav.categories}
         </NavLink>
         <NavLink to="/loans">
           <Wrench size={17} /> {t.nav.loans}

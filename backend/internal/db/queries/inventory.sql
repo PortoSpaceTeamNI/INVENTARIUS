@@ -28,6 +28,11 @@ INSERT INTO categories (parent_id, name) VALUES (?, ?) RETURNING *;
 -- name: UpdateCategory :one
 UPDATE categories SET parent_id = ?, name = ? WHERE id = ? RETURNING *;
 
+-- name: ListCategoryCounts :many
+SELECT categories.id,
+    CAST((SELECT count(*) FROM items i WHERE i.category_id = categories.id) AS INTEGER) AS item_count
+FROM categories;
+
 -- name: DeleteCategory :exec
 DELETE FROM categories WHERE id = ?;
 

@@ -867,6 +867,40 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 	return items, nil
 }
 
+const listCategoryCounts = `-- name: ListCategoryCounts :many
+SELECT categories.id,
+    CAST((SELECT count(*) FROM items i WHERE i.category_id = categories.id) AS INTEGER) AS item_count
+FROM categories
+`
+
+type ListCategoryCountsRow struct {
+	ID        int64 `json:"id"`
+	ItemCount int64 `json:"item_count"`
+}
+
+func (q *Queries) ListCategoryCounts(ctx context.Context) ([]ListCategoryCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCategoryCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCategoryCountsRow
+	for rows.Next() {
+		var i ListCategoryCountsRow
+		if err := rows.Scan(&i.ID, &i.ItemCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDonePrintJobs = `-- name: ListDonePrintJobs :many
 SELECT id, created_at, user_id, code, symbology, caption, status, attempts, error, printed_at FROM print_jobs WHERE status = 'done' ORDER BY printed_at, id
 `

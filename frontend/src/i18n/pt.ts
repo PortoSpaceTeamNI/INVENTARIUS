@@ -70,6 +70,7 @@ export const pt: Dict = {
     import: "Importar",
     admin: "Administração",
     people: "Pessoas",
+    categories: "Categorias",
     searchHint: "Procurar artigos, peças, locais…",
     profile: "O teu perfil",
     breadcrumb: "Navegação",
@@ -331,6 +332,32 @@ export const pt: Dict = {
     namePh: "ex.: Prateleira C, Gaveta 4",
     printLabel: "Imprimir a etiqueta",
     create: "Criar local",
+  },
+
+  cats: {
+    title: "Categorias",
+    subtitle: (cats: number, items: number) =>
+      `${cats} ${s(cats, "categoria", "categorias")} · ${items} ${s(items, "artigo arrumado", "artigos arrumados")}`,
+    newCategory: "Nova categoria",
+    find: "Procurar uma categoria…",
+    noneYet: "Ainda não há categorias",
+    noneHint: "Agrupa os artigos pelo que são: Eletrónica, Fixadores, Ferramentas…",
+    nSub: (n: number) => `${n} ${s(n, "subcategoria", "subcategorias")} · `,
+    showItems: "Ver os artigos",
+    addSub: "Adicionar subcategoria",
+    edit: "Mudar nome ou mover",
+    delete: "Apagar categoria",
+    newSubtitle: "Os artigos podem ser arrumados nela e encontrados pelo nome.",
+    editSubtitle: "As subcategorias e os artigos vão com ela.",
+    namePh: "ex.: Fixadores, Conectores",
+    topLevel: "Nenhuma (nível de topo)",
+    create: "Criar categoria",
+    created: (n: string) => `${n} criada`,
+    saved: (n: string) => `${n} guardada`,
+    confirmDelete: (n: string) => `Apagar a categoria ${n}?`,
+    notEmpty: (subs: number, items: number) =>
+      `Esvazia-a primeiro: ainda tem ${[subs && `${subs} ${s(subs, "subcategoria", "subcategorias")}`, items && `${items} ${s(items, "artigo", "artigos")}`].filter(Boolean).join(" e ")}.`,
+    deleted: (n: string) => `${n} apagada`,
   },
 
   loc: {

@@ -200,6 +200,15 @@ func (s *Server) listCategories(w http.ResponseWriter, r *http.Request, u *auth.
 	return writeJSON(w, cats)
 }
 
+// categoryCounts answers how many items each category holds directly.
+func (s *Server) categoryCounts(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	rows, err := s.store.ListCategoryCounts(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, nonNil(rows))
+}
+
 type categoryBody struct {
 	ParentID *int64 `json:"parent_id"`
 	Name     string `json:"name"`
@@ -210,8 +219,8 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request, u *auth.
 	if err := decode(r, &b); err != nil {
 		return err
 	}
-	if b.Name = strings.TrimSpace(b.Name); b.Name == "" {
-		return badRequest("name is required")
+	if err := s.checkCategory(r.Context(), 0, &b); err != nil {
+		return err
 	}
 	c, err := s.store.CreateCategory(r.Context(), db.CreateCategoryParams{ParentID: b.ParentID, Name: b.Name})
 	if err != nil {
@@ -229,17 +238,34 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request, u *auth.
 	if err := decode(r, &b); err != nil {
 		return err
 	}
+	if err := s.checkCategory(r.Context(), id, &b); err != nil {
+		return err
+	}
+	c, err := s.store.UpdateCategory(r.Context(), db.UpdateCategoryParams{ParentID: b.ParentID, Name: b.Name, ID: id})
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, c)
+}
+
+// checkCategory trims b's name and checks that category id (0 for a new
+// one) can have it under b's parent: the parent exists, is not the category
+// or inside it, and has no other subcategory of that name.
+func (s *Server) checkCategory(ctx context.Context, id int64, b *categoryBody) error {
 	if b.Name = strings.TrimSpace(b.Name); b.Name == "" {
 		return badRequest("name is required")
 	}
+	cats, err := s.store.ListCategories(ctx)
+	if err != nil {
+		return err
+	}
+	parent := map[int64]*int64{}
+	for _, c := range cats {
+		parent[c.ID] = c.ParentID
+	}
 	if b.ParentID != nil {
-		cats, err := s.store.ListCategories(r.Context())
-		if err != nil {
-			return err
-		}
-		parent := map[int64]*int64{}
-		for _, c := range cats {
-			parent[c.ID] = c.ParentID
+		if _, ok := parent[*b.ParentID]; !ok {
+			return badRequest("unknown parent category")
 		}
 		for p, n := b.ParentID, 0; p != nil && n < 64; p, n = parent[*p], n+1 {
 			if *p == id {
@@ -247,11 +273,16 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request, u *auth.
 			}
 		}
 	}
-	c, err := s.store.UpdateCategory(r.Context(), db.UpdateCategoryParams{ParentID: b.ParentID, Name: b.Name, ID: id})
-	if err != nil {
-		return err
+	for _, c := range cats {
+		if c.ID != id && sameParent(c.ParentID, b.ParentID) && strings.EqualFold(c.Name, b.Name) {
+			return badRequest("there is already a category with that name there")
+		}
 	}
-	return writeJSON(w, c)
+	return nil
+}
+
+func sameParent(a, b *int64) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }
 
 func (s *Server) deleteCategory(w http.ResponseWriter, r *http.Request, u *auth.User) error {
