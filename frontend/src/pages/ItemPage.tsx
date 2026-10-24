@@ -20,6 +20,7 @@ import {
   useToast,
 } from "../components/ui";
 import {
+  code,
   day,
   errorMessage,
   isUnitKind,
@@ -237,9 +238,11 @@ export function ItemPage() {
                       <div className="row-main">
                         <div className="row-title">
                           {paths.get(s.location_id) ?? `Location ${s.location_id}`}
+                          <span className="faint"> › </span>
+                          <span className="mono">{code.item(item.id)}</span>
                         </div>
                         <div className="row-meta">
-                          <span className="mono">S{s.id}</span>
+                          <span>stock {s.id}</span>
                           {s.lot && <span>lot {s.lot}</span>}
                           {s.expires_on && <span>expires {day(s.expires_on)}</span>}
                           {(s.owner_project_id || s.owner_department_id) && (
