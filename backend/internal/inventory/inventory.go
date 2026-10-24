@@ -24,6 +24,18 @@ func userErr(format string, a ...any) error { return &UserError{fmt.Sprintf(form
 
 var ErrNotFound = errors.New("not found")
 
+// ErrChanged means someone else saved the thing after the user opened it.
+var ErrChanged = errors.New("someone else changed this while you were editing it; reload to see their changes, then try again")
+
+// CheckVersion refuses an edit made from an older version of a row. A nil
+// want (a client that does not send the version) skips the check.
+func CheckVersion(have int64, want *int64) error {
+	if want != nil && *want != have {
+		return ErrChanged
+	}
+	return nil
+}
+
 type Service struct {
 	Store *db.Store
 }
@@ -486,6 +498,8 @@ type AssetParams struct {
 	Status     string
 	Notes      string
 	Owner      Owner
+	// Version the edit was made from (UpdateAsset only).
+	Version *int64
 }
 
 func validAssetStatus(s string) error {
@@ -544,6 +558,9 @@ func (s *Service) UpdateAsset(ctx context.Context, userID, assetID int64, p Asse
 		cur, err := q.GetAsset(ctx, assetID)
 		if err != nil {
 			return notFound(err)
+		}
+		if err := CheckVersion(cur.Version, p.Version); err != nil {
+			return err
 		}
 		if cur.Status == "on_loan" && p.Status != "on_loan" {
 			return userErr("it is on loan; return it first")

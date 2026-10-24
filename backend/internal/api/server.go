@@ -169,6 +169,8 @@ func (s *Server) writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.As(err, &ce):
 		// The client may confirm and retry with override_reserved.
 		writeError(w, http.StatusConflict, ce.Msg)
+	case errors.Is(err, inventory.ErrChanged):
+		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, inventory.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		writeError(w, http.StatusNotFound, "not found")
 	case strings.Contains(err.Error(), "constraint failed"):

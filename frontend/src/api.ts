@@ -48,12 +48,15 @@ export interface Location {
   name: string;
   description: string;
   created_at: string;
+  /** Bumped by every edit; sent back so a save from an outdated form is refused. */
+  version: number;
 }
 
 export interface Category {
   id: number;
   parent_id: number | null;
   name: string;
+  version: number;
 }
 
 export interface Item extends Owned {
@@ -75,6 +78,7 @@ export interface Item extends Owned {
   package: string;
   created_at: string;
   updated_at: string;
+  version: number;
 }
 
 export interface ItemSummary extends Item {
@@ -113,6 +117,7 @@ export interface Stock extends Owned {
   expires_on: string | null;
   created_at: string;
   updated_at: string;
+  version: number;
 }
 
 export interface Asset extends Owned {
@@ -125,6 +130,7 @@ export interface Asset extends Owned {
   notes: string;
   created_at: string;
   updated_at: string;
+  version: number;
 }
 
 export interface Loan {

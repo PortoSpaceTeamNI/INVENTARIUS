@@ -7,8 +7,53 @@ package db
 
 import (
 	"context"
+	"strings"
 	"time"
 )
+
+const changePrintJobStatus = `-- name: ChangePrintJobStatus :execrows
+UPDATE print_jobs SET status = ?1, error = ''
+WHERE id = ?2 AND status IN (/*SLICE:from_status*/?)
+`
+
+type ChangePrintJobStatusParams struct {
+	Status     string   `json:"status"`
+	ID         int64    `json:"id"`
+	FromStatus []string `json:"from_status"`
+}
+
+// Moves a job to status only if it is still in one of the states from.
+func (q *Queries) ChangePrintJobStatus(ctx context.Context, arg ChangePrintJobStatusParams) (int64, error) {
+	query := changePrintJobStatus
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.Status)
+	queryParams = append(queryParams, arg.ID)
+	if len(arg.FromStatus) > 0 {
+		for _, v := range arg.FromStatus {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:from_status*/?", strings.Repeat(",?", len(arg.FromStatus))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:from_status*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const claimPrintJob = `-- name: ClaimPrintJob :execrows
+UPDATE print_jobs SET status = 'printing' WHERE id = ? AND status = 'queued'
+`
+
+func (q *Queries) ClaimPrintJob(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimPrintJob, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
 
 const closeLoan = `-- name: CloseLoan :exec
 UPDATE loans SET returned_at = CURRENT_TIMESTAMP WHERE id = ?
@@ -48,7 +93,7 @@ func (q *Queries) CountLocationUsage(ctx context.Context, id *int64) (int64, err
 
 const createAsset = `-- name: CreateAsset :one
 INSERT INTO assets (item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at
+VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at, version
 `
 
 type CreateAssetParams struct {
@@ -86,12 +131,13 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 		&i.OwnerDepartmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Version,
 	)
 	return i, err
 }
 
 const createCategory = `-- name: CreateCategory :one
-INSERT INTO categories (parent_id, name) VALUES (?, ?) RETURNING id, parent_id, name
+INSERT INTO categories (parent_id, name) VALUES (?, ?) RETURNING id, parent_id, name, version
 `
 
 type CreateCategoryParams struct {
@@ -102,7 +148,12 @@ type CreateCategoryParams struct {
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
 	row := q.db.QueryRowContext(ctx, createCategory, arg.ParentID, arg.Name)
 	var i Category
-	err := row.Scan(&i.ID, &i.ParentID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Version,
+	)
 	return i, err
 }
 
@@ -110,7 +161,7 @@ const createItem = `-- name: CreateItem :one
 INSERT INTO items (
     name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url,
     unit, min_stock, hazard_class, storage_notes, owner_project_id, owner_department_id, package
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version
 `
 
 type CreateItemParams struct {
@@ -170,6 +221,7 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
+		&i.Version,
 	)
 	return i, err
 }
@@ -213,7 +265,7 @@ func (q *Queries) CreateLoan(ctx context.Context, arg CreateLoanParams) (Loan, e
 }
 
 const createLocation = `-- name: CreateLocation :one
-INSERT INTO locations (parent_id, name, description) VALUES (?, ?, ?) RETURNING id, parent_id, name, description, created_at
+INSERT INTO locations (parent_id, name, description) VALUES (?, ?, ?) RETURNING id, parent_id, name, description, created_at, version
 `
 
 type CreateLocationParams struct {
@@ -231,6 +283,7 @@ func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) 
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.Version,
 	)
 	return i, err
 }
@@ -311,7 +364,7 @@ func (q *Queries) CreatePrintJob(ctx context.Context, arg CreatePrintJobParams) 
 
 const createStock = `-- name: CreateStock :one
 INSERT INTO stock (item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, count_state)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state
+VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version
 `
 
 type CreateStockParams struct {
@@ -349,6 +402,7 @@ func (q *Queries) CreateStock(ctx context.Context, arg CreateStockParams) (Stock
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CountState,
+		&i.Version,
 	)
 	return i, err
 }
@@ -398,8 +452,32 @@ func (q *Queries) DeleteStock(ctx context.Context, id int64) error {
 	return err
 }
 
+const findCategoryByName = `-- name: FindCategoryByName :one
+SELECT id, parent_id, name, version FROM categories
+WHERE parent_id IS ?1 AND name = ?2 COLLATE NOCASE AND id != ?3
+LIMIT 1
+`
+
+type FindCategoryByNameParams struct {
+	ParentID  *int64 `json:"parent_id"`
+	Name      string `json:"name"`
+	ExcludeID int64  `json:"exclude_id"`
+}
+
+func (q *Queries) FindCategoryByName(ctx context.Context, arg FindCategoryByNameParams) (Category, error) {
+	row := q.db.QueryRowContext(ctx, findCategoryByName, arg.ParentID, arg.Name, arg.ExcludeID)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Version,
+	)
+	return i, err
+}
+
 const findItemByMPN = `-- name: FindItemByMPN :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package FROM items WHERE mpn = ? AND mpn != '' LIMIT 1
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version FROM items WHERE mpn = ? AND mpn != '' LIMIT 1
 `
 
 func (q *Queries) FindItemByMPN(ctx context.Context, mpn string) (Item, error) {
@@ -425,12 +503,13 @@ func (q *Queries) FindItemByMPN(ctx context.Context, mpn string) (Item, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
+		&i.Version,
 	)
 	return i, err
 }
 
 const findItemByName = `-- name: FindItemByName :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? COLLATE NOCASE ORDER BY id LIMIT 1
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? COLLATE NOCASE ORDER BY id LIMIT 1
 `
 
 type FindItemByNameParams struct {
@@ -462,12 +541,39 @@ func (q *Queries) FindItemByName(ctx context.Context, arg FindItemByNameParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
+		&i.Version,
+	)
+	return i, err
+}
+
+const findLocationByName = `-- name: FindLocationByName :one
+SELECT id, parent_id, name, description, created_at, version FROM locations
+WHERE parent_id IS ?1 AND name = ?2 COLLATE NOCASE AND id != ?3
+LIMIT 1
+`
+
+type FindLocationByNameParams struct {
+	ParentID  *int64 `json:"parent_id"`
+	Name      string `json:"name"`
+	ExcludeID int64  `json:"exclude_id"`
+}
+
+func (q *Queries) FindLocationByName(ctx context.Context, arg FindLocationByNameParams) (Location, error) {
+	row := q.db.QueryRowContext(ctx, findLocationByName, arg.ParentID, arg.Name, arg.ExcludeID)
+	var i Location
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+		&i.Version,
 	)
 	return i, err
 }
 
 const findMergeableStock = `-- name: FindMergeableStock :one
-SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state FROM stock
+SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version FROM stock
 WHERE item_id = ?1 AND location_id = ?2 AND lot = ?3
   AND expires_on IS ?4
   AND owner_project_id IS ?5
@@ -509,12 +615,13 @@ func (q *Queries) FindMergeableStock(ctx context.Context, arg FindMergeableStock
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CountState,
+		&i.Version,
 	)
 	return i, err
 }
 
 const getAsset = `-- name: GetAsset :one
-SELECT id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at FROM assets WHERE id = ?
+SELECT id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at, version FROM assets WHERE id = ?
 `
 
 func (q *Queries) GetAsset(ctx context.Context, id int64) (Asset, error) {
@@ -532,12 +639,29 @@ func (q *Queries) GetAsset(ctx context.Context, id int64) (Asset, error) {
 		&i.OwnerDepartmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const getCategory = `-- name: GetCategory :one
+SELECT id, parent_id, name, version FROM categories WHERE id = ?
+`
+
+func (q *Queries) GetCategory(ctx context.Context, id int64) (Category, error) {
+	row := q.db.QueryRowContext(ctx, getCategory, id)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Version,
 	)
 	return i, err
 }
 
 const getItem = `-- name: GetItem :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package FROM items WHERE id = ?
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version FROM items WHERE id = ?
 `
 
 func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
@@ -563,12 +687,13 @@ func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
+		&i.Version,
 	)
 	return i, err
 }
 
 const getLocation = `-- name: GetLocation :one
-SELECT id, parent_id, name, description, created_at FROM locations WHERE id = ?
+SELECT id, parent_id, name, description, created_at, version FROM locations WHERE id = ?
 `
 
 func (q *Queries) GetLocation(ctx context.Context, id int64) (Location, error) {
@@ -580,6 +705,7 @@ func (q *Queries) GetLocation(ctx context.Context, id int64) (Location, error) {
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.Version,
 	)
 	return i, err
 }
@@ -628,7 +754,7 @@ func (q *Queries) GetPrintJob(ctx context.Context, id int64) (PrintJob, error) {
 }
 
 const getStock = `-- name: GetStock :one
-SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state FROM stock WHERE id = ?
+SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version FROM stock WHERE id = ?
 `
 
 func (q *Queries) GetStock(ctx context.Context, id int64) (Stock, error) {
@@ -646,12 +772,13 @@ func (q *Queries) GetStock(ctx context.Context, id int64) (Stock, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CountState,
+		&i.Version,
 	)
 	return i, err
 }
 
 const listAssetsByItem = `-- name: ListAssetsByItem :many
-SELECT id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at FROM assets WHERE item_id = ? ORDER BY id
+SELECT id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at, version FROM assets WHERE item_id = ? ORDER BY id
 `
 
 func (q *Queries) ListAssetsByItem(ctx context.Context, itemID int64) ([]Asset, error) {
@@ -675,6 +802,7 @@ func (q *Queries) ListAssetsByItem(ctx context.Context, itemID int64) ([]Asset, 
 			&i.OwnerDepartmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -690,7 +818,7 @@ func (q *Queries) ListAssetsByItem(ctx context.Context, itemID int64) ([]Asset, 
 }
 
 const listAssetsByLocation = `-- name: ListAssetsByLocation :many
-SELECT assets.id, assets.item_id, assets.serial, assets.location_id, assets.condition, assets.status, assets.notes, assets.owner_project_id, assets.owner_department_id, assets.created_at, assets.updated_at, items.name AS item_name, items.kind AS item_kind,
+SELECT assets.id, assets.item_id, assets.serial, assets.location_id, assets.condition, assets.status, assets.notes, assets.owner_project_id, assets.owner_department_id, assets.created_at, assets.updated_at, assets.version, items.name AS item_name, items.kind AS item_kind,
     CAST(EXISTS (SELECT 1 FROM reservations r
         WHERE r.asset_id = assets.id AND r.released_at IS NULL
           AND (r.until IS NULL OR r.until >= date('now'))) AS BOOLEAN) AS reserved
@@ -727,6 +855,7 @@ func (q *Queries) ListAssetsByLocation(ctx context.Context, locationID *int64) (
 			&i.Asset.OwnerDepartmentID,
 			&i.Asset.CreatedAt,
 			&i.Asset.UpdatedAt,
+			&i.Asset.Version,
 			&i.ItemName,
 			&i.ItemKind,
 			&i.Reserved,
@@ -745,7 +874,7 @@ func (q *Queries) ListAssetsByLocation(ctx context.Context, locationID *int64) (
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, parent_id, name FROM categories ORDER BY name
+SELECT id, parent_id, name, version FROM categories ORDER BY name
 `
 
 func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
@@ -757,7 +886,12 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 	var items []Category
 	for rows.Next() {
 		var i Category
-		if err := rows.Scan(&i.ID, &i.ParentID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Name,
+			&i.Version,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -772,7 +906,7 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 }
 
 const listItemSummaries = `-- name: ListItemSummaries :many
-SELECT items.id, items.name, items.kind, items.category_id, items.description, items.manufacturer, items.mpn, items.supplier_url, items.datasheet_url, items.unit, items.min_stock, items.photo, items.hazard_class, items.storage_notes, items.owner_project_id, items.owner_department_id, items.created_at, items.updated_at, items.package,
+SELECT items.id, items.name, items.kind, items.category_id, items.description, items.manufacturer, items.mpn, items.supplier_url, items.datasheet_url, items.unit, items.min_stock, items.photo, items.hazard_class, items.storage_notes, items.owner_project_id, items.owner_department_id, items.created_at, items.updated_at, items.package, items.version,
     CAST(COALESCE((SELECT sum(s.quantity) FROM stock s
         WHERE s.item_id = items.id AND s.count_state != 'uncounted'), 0) AS REAL) AS total_quantity,
     CAST((SELECT count(*) FROM stock s WHERE s.item_id = items.id AND s.count_state = 'uncounted') AS INTEGER) AS uncounted_lots,
@@ -822,6 +956,7 @@ type ListItemSummariesRow struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	Package           string    `json:"package"`
+	Version           int64     `json:"version"`
 	TotalQuantity     float64   `json:"total_quantity"`
 	UncountedLots     int64     `json:"uncounted_lots"`
 	ApproxLots        int64     `json:"approx_lots"`
@@ -865,6 +1000,7 @@ func (q *Queries) ListItemSummaries(ctx context.Context, arg ListItemSummariesPa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Package,
+			&i.Version,
 			&i.TotalQuantity,
 			&i.UncountedLots,
 			&i.ApproxLots,
@@ -970,7 +1106,7 @@ func (q *Queries) ListLocationCounts(ctx context.Context) ([]ListLocationCountsR
 }
 
 const listLocations = `-- name: ListLocations :many
-SELECT id, parent_id, name, description, created_at FROM locations ORDER BY name
+SELECT id, parent_id, name, description, created_at, version FROM locations ORDER BY name
 `
 
 func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
@@ -988,6 +1124,7 @@ func (q *Queries) ListLocations(ctx context.Context) ([]Location, error) {
 			&i.Name,
 			&i.Description,
 			&i.CreatedAt,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -1213,7 +1350,7 @@ func (q *Queries) ListQueuedPrintJobs(ctx context.Context, limit int64) ([]Print
 }
 
 const listStockByItem = `-- name: ListStockByItem :many
-SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state FROM stock WHERE item_id = ? ORDER BY location_id, id
+SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version FROM stock WHERE item_id = ? ORDER BY location_id, id
 `
 
 func (q *Queries) ListStockByItem(ctx context.Context, itemID int64) ([]Stock, error) {
@@ -1237,6 +1374,7 @@ func (q *Queries) ListStockByItem(ctx context.Context, itemID int64) ([]Stock, e
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CountState,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -1252,7 +1390,7 @@ func (q *Queries) ListStockByItem(ctx context.Context, itemID int64) ([]Stock, e
 }
 
 const listStockByLocation = `-- name: ListStockByLocation :many
-SELECT stock.id, stock.item_id, stock.location_id, stock.quantity, stock.lot, stock.expires_on, stock.owner_project_id, stock.owner_department_id, stock.created_at, stock.updated_at, stock.count_state, items.name AS item_name, items.unit AS item_unit, items.kind AS item_kind,
+SELECT stock.id, stock.item_id, stock.location_id, stock.quantity, stock.lot, stock.expires_on, stock.owner_project_id, stock.owner_department_id, stock.created_at, stock.updated_at, stock.count_state, stock.version, items.name AS item_name, items.unit AS item_unit, items.kind AS item_kind,
     items.datasheet_url AS item_datasheet_url, items.package AS item_package,
     CAST(COALESCE((SELECT sum(r.quantity) FROM reservations r
         WHERE r.stock_id = stock.id AND r.released_at IS NULL
@@ -1293,6 +1431,7 @@ func (q *Queries) ListStockByLocation(ctx context.Context, locationID int64) ([]
 			&i.Stock.CreatedAt,
 			&i.Stock.UpdatedAt,
 			&i.Stock.CountState,
+			&i.Stock.Version,
 			&i.ItemName,
 			&i.ItemUnit,
 			&i.ItemKind,
@@ -1323,7 +1462,7 @@ func (q *Queries) RequeueInterruptedPrintJobs(ctx context.Context) error {
 }
 
 const setAssetState = `-- name: SetAssetState :exec
-UPDATE assets SET status = ?, location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+UPDATE assets SET status = ?, location_id = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
 `
 
 type SetAssetStateParams struct {
@@ -1422,8 +1561,8 @@ func (q *Queries) SetStockQuantity(ctx context.Context, arg SetStockQuantityPara
 
 const updateAsset = `-- name: UpdateAsset :one
 UPDATE assets SET serial = ?, location_id = ?, condition = ?, status = ?, notes = ?,
-    owner_project_id = ?, owner_department_id = ?, updated_at = CURRENT_TIMESTAMP
-WHERE id = ? RETURNING id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at
+    owner_project_id = ?, owner_department_id = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
+WHERE id = ? RETURNING id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at, version
 `
 
 type UpdateAssetParams struct {
@@ -1461,12 +1600,13 @@ func (q *Queries) UpdateAsset(ctx context.Context, arg UpdateAssetParams) (Asset
 		&i.OwnerDepartmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Version,
 	)
 	return i, err
 }
 
 const updateCategory = `-- name: UpdateCategory :one
-UPDATE categories SET parent_id = ?, name = ? WHERE id = ? RETURNING id, parent_id, name
+UPDATE categories SET parent_id = ?, name = ?, version = version + 1 WHERE id = ? RETURNING id, parent_id, name, version
 `
 
 type UpdateCategoryParams struct {
@@ -1478,7 +1618,12 @@ type UpdateCategoryParams struct {
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
 	row := q.db.QueryRowContext(ctx, updateCategory, arg.ParentID, arg.Name, arg.ID)
 	var i Category
-	err := row.Scan(&i.ID, &i.ParentID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Version,
+	)
 	return i, err
 }
 
@@ -1487,8 +1632,8 @@ UPDATE items SET
     name = ?, kind = ?, category_id = ?, description = ?, manufacturer = ?, mpn = ?,
     supplier_url = ?, datasheet_url = ?, unit = ?, min_stock = ?, hazard_class = ?,
     storage_notes = ?, owner_project_id = ?, owner_department_id = ?, package = ?,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = ? RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package
+    version = version + 1, updated_at = CURRENT_TIMESTAMP
+WHERE id = ? RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version
 `
 
 type UpdateItemParams struct {
@@ -1550,12 +1695,13 @@ func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) (Item, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
+		&i.Version,
 	)
 	return i, err
 }
 
 const updateLocation = `-- name: UpdateLocation :one
-UPDATE locations SET parent_id = ?, name = ?, description = ? WHERE id = ? RETURNING id, parent_id, name, description, created_at
+UPDATE locations SET parent_id = ?, name = ?, description = ?, version = version + 1 WHERE id = ? RETURNING id, parent_id, name, description, created_at, version
 `
 
 type UpdateLocationParams struct {
@@ -1579,14 +1725,15 @@ func (q *Queries) UpdateLocation(ctx context.Context, arg UpdateLocationParams) 
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.Version,
 	)
 	return i, err
 }
 
 const updateStockDetails = `-- name: UpdateStockDetails :one
 UPDATE stock SET lot = ?, expires_on = ?, owner_project_id = ?, owner_department_id = ?,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = ? RETURNING id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state
+    version = version + 1, updated_at = CURRENT_TIMESTAMP
+WHERE id = ? RETURNING id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version
 `
 
 type UpdateStockDetailsParams struct {
@@ -1618,6 +1765,7 @@ func (q *Queries) UpdateStockDetails(ctx context.Context, arg UpdateStockDetails
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CountState,
+		&i.Version,
 	)
 	return i, err
 }

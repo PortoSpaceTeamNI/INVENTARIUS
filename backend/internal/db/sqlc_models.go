@@ -20,12 +20,14 @@ type Asset struct {
 	OwnerDepartmentID *int64    `json:"owner_department_id"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
+	Version           int64     `json:"version"`
 }
 
 type Category struct {
 	ID       int64  `json:"id"`
 	ParentID *int64 `json:"parent_id"`
 	Name     string `json:"name"`
+	Version  int64  `json:"version"`
 }
 
 type Department struct {
@@ -54,6 +56,7 @@ type Item struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	Package           string    `json:"package"`
+	Version           int64     `json:"version"`
 }
 
 type Loan struct {
@@ -74,6 +77,7 @@ type Location struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
+	Version     int64     `json:"version"`
 }
 
 type Movement struct {
@@ -146,6 +150,7 @@ type Stock struct {
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 	CountState        string     `json:"count_state"`
+	Version           int64      `json:"version"`
 }
 
 type User struct {

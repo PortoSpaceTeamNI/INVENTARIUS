@@ -253,6 +253,8 @@ function EditLocationSheet(props: { onClose: () => void; detail: LocationDetail;
   const [name, setName] = useState(loc.name);
   const [description, setDescription] = useState(loc.description);
   const [parent, setParent] = useState<number | null>(loc.parent_id);
+  // The version the sheet was opened with, not whatever a refetch brings.
+  const [version] = useState(loc.version);
   const [error, setError] = useState<unknown>(null);
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -260,7 +262,12 @@ function EditLocationSheet(props: { onClose: () => void; detail: LocationDetail;
   async function submit(e: FormEvent) {
     e.preventDefault();
     try {
-      await api("PATCH", `/api/locations/${loc.id}`, { name, description, parent_id: parent });
+      await api("PATCH", `/api/locations/${loc.id}`, {
+        name,
+        description,
+        parent_id: parent,
+        version,
+      });
       qc.invalidateQueries({ queryKey: ["location"] });
       qc.invalidateQueries({ queryKey: ["locations"] });
       props.onClose();
