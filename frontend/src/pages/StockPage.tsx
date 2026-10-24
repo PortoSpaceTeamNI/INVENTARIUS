@@ -271,7 +271,7 @@ export function StockPage() {
             </div>
           </Card>
           <Card title="Label">
-            <LabelCard code={`S${stock.id}`} caption={item.name} bare />
+            <LabelCard code={code.item(item.id)} caption={item.name} bare />
           </Card>
         </div>
       </div>

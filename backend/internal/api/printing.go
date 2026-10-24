@@ -55,7 +55,7 @@ func (s *Server) enqueueLabel(ctx context.Context, u *auth.User, k codes.Kind, i
 }
 
 // defaultCaption: only locations get a name on the label by default; on
-// assets and stock the code alone keeps the label at ~8 mm.
+// items and assets the code alone keeps the label at ~8 mm.
 func (s *Server) defaultCaption(k codes.Kind, name string) string {
 	if k == codes.Location {
 		return name
@@ -107,6 +107,9 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 		k, id, err := codes.Parse(l.Code)
 		if err != nil {
 			return badRequest(err.Error())
+		}
+		if k == codes.Stock {
+			return badRequest("stock has no label of its own; print the item's label instead")
 		}
 		if _, err := s.codePath(r.Context(), k, id); err != nil {
 			return badRequest("no " + k.Name() + " with code " + codes.Format(k, id))

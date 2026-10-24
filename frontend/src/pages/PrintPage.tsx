@@ -52,7 +52,7 @@ export function PrintPage() {
           <Card title="Recent print jobs" count={jobs.data?.length}>
             {jobs.data?.length === 0 ? (
               <Empty icon={<Tag size={20} />} title="No labels printed yet">
-                Labels print automatically when you create places, stock and units.
+                Labels print automatically when you create places, add stock and register units.
               </Empty>
             ) : (
               <div className="list">

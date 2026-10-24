@@ -373,7 +373,9 @@ export function ItemPage() {
 
           <Card title="Item label">
             <p className="small muted" style={{ padding: "0.85rem 1.1rem 0" }}>
-              Usually you label the {units ? "units" : "drawers or stock"}; this one opens the item page.
+              {units
+                ? "Usually you label the units; this one opens the item page."
+                : "Stick this on every bag of this item; scanning it opens the item page."}
             </p>
             <LabelCard code={`I${item.id}`} caption={item.name} bare />
           </Card>
