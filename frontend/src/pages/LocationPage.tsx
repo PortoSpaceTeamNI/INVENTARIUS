@@ -18,7 +18,7 @@ import {
   Sheet,
   useToast,
 } from "../components/ui";
-import { errorMessage, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
+import { code, errorMessage, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
 import { NewLocationSheet, useLocationCounts } from "./LocationsPage";
 
 export function LocationPage() {
@@ -121,7 +121,7 @@ export function LocationPage() {
                           {itemTitle({ name: s.item_name, package: s.item_package })}
                         </div>
                         <div className="row-meta">
-                          <span className="mono">S{s.stock.id}</span>
+                          <span className="mono">{code.item(s.stock.item_id)}</span>
                           {s.stock.lot && <span>lot {s.stock.lot}</span>}
                           {s.reserved > 0 && (
                             <span className="text-warn">{qty(s.reserved, s.item_unit)} reserved</span>

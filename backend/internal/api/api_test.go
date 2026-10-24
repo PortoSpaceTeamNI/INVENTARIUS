@@ -287,6 +287,8 @@ func TestPrintFailureAndRetry(t *testing.T) {
 		return jobs[0].Status == "done"
 	})
 	admin.do("POST", "/api/print", map[string]any{"labels": []map[string]string{{"code": "A999"}}}, 400, nil)
+	// Bags carry item labels; stock codes are never printed.
+	admin.do("POST", "/api/print", map[string]any{"labels": []map[string]string{{"code": "S1"}}}, 400, nil)
 }
 
 func TestImport(t *testing.T) {

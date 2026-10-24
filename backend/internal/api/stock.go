@@ -68,7 +68,9 @@ func (s *Server) receiveStock(w http.ResponseWriter, r *http.Request, u *auth.Us
 	}
 	if b.PrintLabel {
 		if it, err := s.store.GetItem(r.Context(), st.ItemID); err == nil {
-			s.enqueueLabel(r.Context(), u, codes.Stock, st.ID, it.Name)
+			// Bags carry the item's label, not a stock one: every bag of the
+			// same part shares it.
+			s.enqueueLabel(r.Context(), u, codes.Item, it.ID, it.Name)
 		}
 	}
 	return writeJSON(w, st)

@@ -11,12 +11,13 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, get, type StockDetail } from "../api";
+import { api, get, type ItemDetail, type StockDetail } from "../api";
 import { ActionSheet, type ActionValues } from "../components/ActionSheet";
 import { LabelCard } from "../components/LabelCard";
 import { DatasheetButton, ReservationList, StockMeter } from "../components/Reservations";
 import { Card, ErrorBox, History, ItemIcon, Loading, Menu, Page, useToast } from "../components/ui";
 import {
+  code,
   day,
   errorMessage,
   itemTitle,
@@ -38,6 +39,13 @@ export function StockPage() {
   const { data: meta } = useMeta();
   const { data: locs } = useLocations();
   const { data: me } = useMe();
+  // The item's other lots, so the same part in another drawer is one click away.
+  const itemId = q.data?.item.id;
+  const siblings = useQuery({
+    queryKey: ["item", itemId],
+    queryFn: () => get<ItemDetail>(`/api/items/${itemId}`),
+    enabled: itemId !== undefined,
+  });
   const [op, setOp] = useState<Op | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
@@ -54,6 +62,7 @@ export function StockPage() {
   const empty = stock.quantity === 0 && !lots;
   const paths = locationPaths(locs);
   const where = paths.get(location.id) ?? location.name;
+  const others = (siblings.data?.stock ?? []).filter((s) => s.id !== stock.id);
 
   async function run(o: Op, v: ActionValues) {
     if (o === "reserve") {
@@ -100,9 +109,13 @@ export function StockPage() {
       title={itemTitle(item)}
       subtitle={
         <>
+          {/* The bag is labelled with the item code, so that ends the path; the stock id is secondary. */}
           in <Link to={`/locations/${location.id}`}>{where}</Link>
-          <span className="faint"> · </span>
-          <span className="mono">S{stock.id}</span>
+          <span className="faint"> › </span>
+          <Link to={`/items/${item.id}`} className="mono">
+            {code.item(item.id)}
+          </Link>
+          <span className="faint small"> (stock {stock.id})</span>
         </>
       }
     >
@@ -222,6 +235,19 @@ export function StockPage() {
                 <dd>
                   <Link to={`/locations/${location.id}`}>{where}</Link>
                 </dd>
+                {others.length > 0 && (
+                  <>
+                    <dt>Also in</dt>
+                    <dd className="stack" style={{ gap: "0.25rem" }}>
+                      {others.map((s) => (
+                        <Link key={s.id} to={`/stock/${s.id}`}>
+                          {paths.get(s.location_id) ?? `Location ${s.location_id}`} › {code.item(item.id)}{" "}
+                          <span className="faint small">(stock {s.id})</span>
+                        </Link>
+                      ))}
+                    </dd>
+                  </>
+                )}
                 {stock.lot && (
                   <>
                     <dt>Lot</dt>
@@ -245,7 +271,7 @@ export function StockPage() {
             </div>
           </Card>
           <Card title="Label">
-            <LabelCard code={`S${stock.id}`} caption={item.name} bare />
+            <LabelCard code={code.item(item.id)} caption={item.name} bare />
           </Card>
         </div>
       </div>

@@ -20,6 +20,7 @@ import {
   useToast,
 } from "../components/ui";
 import {
+  code,
   day,
   errorMessage,
   isUnitKind,
@@ -237,9 +238,11 @@ export function ItemPage() {
                       <div className="row-main">
                         <div className="row-title">
                           {paths.get(s.location_id) ?? `Location ${s.location_id}`}
+                          <span className="faint"> › </span>
+                          <span className="mono">{code.item(item.id)}</span>
                         </div>
                         <div className="row-meta">
-                          <span className="mono">S{s.id}</span>
+                          <span>stock {s.id}</span>
                           {s.lot && <span>lot {s.lot}</span>}
                           {s.expires_on && <span>expires {day(s.expires_on)}</span>}
                           {(s.owner_project_id || s.owner_department_id) && (
@@ -370,7 +373,9 @@ export function ItemPage() {
 
           <Card title="Item label">
             <p className="small muted" style={{ padding: "0.85rem 1.1rem 0" }}>
-              Usually you label the {units ? "units" : "drawers or stock"}; this one opens the item page.
+              {units
+                ? "Usually you label the units; this one opens the item page."
+                : "Stick this on every bag of this item; scanning it opens the item page."}
             </p>
             <LabelCard code={`I${item.id}`} caption={item.name} bare />
           </Card>

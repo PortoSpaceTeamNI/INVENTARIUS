@@ -119,7 +119,7 @@ export function AddFields(props: {
       )}
       <label className="check">
         <input type="checkbox" checked={v.print} onChange={(e) => set("print", e.target.checked)} />
-        Print {units ? "a label for each unit" : "a label for this stock"}
+        Print {units ? "a label for each unit" : "the item label for this bag"}
       </label>
     </>
   );
