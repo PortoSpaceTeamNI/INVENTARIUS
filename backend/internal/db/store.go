@@ -66,8 +66,14 @@ func migrate(ctx context.Context, sqlDB *sql.DB) error {
 	return nil
 }
 
-// Tx runs fn inside a transaction, committing if it returns nil.
+type txKey struct{}
+
+// Tx runs fn inside a transaction, committing if it returns nil. Inside a
+// TxContext it joins that outer transaction instead of starting its own.
 func (s *Store) Tx(ctx context.Context, fn func(q *Queries) error) error {
+	if q, ok := ctx.Value(txKey{}).(*Queries); ok {
+		return fn(q)
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -77,6 +83,15 @@ func (s *Store) Tx(ctx context.Context, fn func(q *Queries) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// TxContext is Tx for work spanning several operations (an import): every
+// Tx run with the ctx passed to fn is part of the same transaction, so all
+// of it is saved or none of it.
+func (s *Store) TxContext(ctx context.Context, fn func(ctx context.Context, q *Queries) error) error {
+	return s.Tx(ctx, func(q *Queries) error {
+		return fn(context.WithValue(ctx, txKey{}, q), q)
+	})
 }
 
 func (s *Store) Close() error { return s.DB.Close() }

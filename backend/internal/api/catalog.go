@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -23,8 +25,32 @@ import (
 	"inventarius/internal/auth"
 	"inventarius/internal/codes"
 	"inventarius/internal/db"
+	"inventarius/internal/inventory"
 	"inventarius/internal/search"
 )
+
+// sameName refuses a second location or category with the same name in the
+// same parent. It runs in the transaction that writes, so two people
+// creating "Shelf 3" at once get one shelf and an error, not two shelves.
+func sameName(what string, err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return badRequest("there is already " + what + " there")
+}
+
+func locationExists(ctx context.Context, q *db.Queries, parent *int64, name string, exclude int64) error {
+	l, err := q.FindLocationByName(ctx, db.FindLocationByNameParams{ParentID: parent, Name: name, ExcludeID: exclude})
+	return sameName(fmt.Sprintf("a location called %q (%s)", l.Name, codes.Format(codes.Location, l.ID)), err)
+}
+
+func categoryExists(ctx context.Context, q *db.Queries, parent *int64, name string, exclude int64) error {
+	c, err := q.FindCategoryByName(ctx, db.FindCategoryByNameParams{ParentID: parent, Name: name, ExcludeID: exclude})
+	return sameName(fmt.Sprintf("a category called %q", c.Name), err)
+}
 
 // ---- locations ----
 
@@ -51,6 +77,7 @@ type locationBody struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	PrintLabel  bool   `json:"print_label"`
+	Version     *int64 `json:"version"`
 }
 
 func (b *locationBody) validate() error {
@@ -69,7 +96,15 @@ func (s *Server) createLocation(w http.ResponseWriter, r *http.Request, u *auth.
 	if err := b.validate(); err != nil {
 		return err
 	}
-	loc, err := s.store.CreateLocation(r.Context(), db.CreateLocationParams{ParentID: b.ParentID, Name: b.Name, Description: b.Description})
+	var loc db.Location
+	err := s.store.Tx(r.Context(), func(q *db.Queries) error {
+		if err := locationExists(r.Context(), q, b.ParentID, b.Name, 0); err != nil {
+			return err
+		}
+		var err error
+		loc, err = q.CreateLocation(r.Context(), db.CreateLocationParams{ParentID: b.ParentID, Name: b.Name, Description: b.Description})
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -161,7 +196,21 @@ func (s *Server) updateLocation(w http.ResponseWriter, r *http.Request, u *auth.
 			return badRequest("a location cannot be inside itself")
 		}
 	}
-	loc, err := s.store.UpdateLocation(r.Context(), db.UpdateLocationParams{ParentID: b.ParentID, Name: b.Name, Description: b.Description, ID: id})
+	var loc db.Location
+	err = s.store.Tx(r.Context(), func(q *db.Queries) error {
+		cur, err := q.GetLocation(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		if err := inventory.CheckVersion(cur.Version, b.Version); err != nil {
+			return err
+		}
+		if err := locationExists(r.Context(), q, b.ParentID, b.Name, id); err != nil {
+			return err
+		}
+		loc, err = q.UpdateLocation(r.Context(), db.UpdateLocationParams{ParentID: b.ParentID, Name: b.Name, Description: b.Description, ID: id})
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -203,6 +252,7 @@ func (s *Server) listCategories(w http.ResponseWriter, r *http.Request, u *auth.
 type categoryBody struct {
 	ParentID *int64 `json:"parent_id"`
 	Name     string `json:"name"`
+	Version  *int64 `json:"version"`
 }
 
 func (s *Server) createCategory(w http.ResponseWriter, r *http.Request, u *auth.User) error {
@@ -213,7 +263,15 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request, u *auth.
 	if b.Name = strings.TrimSpace(b.Name); b.Name == "" {
 		return badRequest("name is required")
 	}
-	c, err := s.store.CreateCategory(r.Context(), db.CreateCategoryParams{ParentID: b.ParentID, Name: b.Name})
+	var c db.Category
+	err := s.store.Tx(r.Context(), func(q *db.Queries) error {
+		if err := categoryExists(r.Context(), q, b.ParentID, b.Name, 0); err != nil {
+			return err
+		}
+		var err error
+		c, err = q.CreateCategory(r.Context(), db.CreateCategoryParams{ParentID: b.ParentID, Name: b.Name})
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -247,7 +305,21 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request, u *auth.
 			}
 		}
 	}
-	c, err := s.store.UpdateCategory(r.Context(), db.UpdateCategoryParams{ParentID: b.ParentID, Name: b.Name, ID: id})
+	var c db.Category
+	err = s.store.Tx(r.Context(), func(q *db.Queries) error {
+		cur, err := q.GetCategory(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		if err := inventory.CheckVersion(cur.Version, b.Version); err != nil {
+			return err
+		}
+		if err := categoryExists(r.Context(), q, b.ParentID, b.Name, id); err != nil {
+			return err
+		}
+		c, err = q.UpdateCategory(r.Context(), db.UpdateCategoryParams{ParentID: b.ParentID, Name: b.Name, ID: id})
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -373,6 +445,7 @@ type itemBody struct {
 	HazardClass  string   `json:"hazard_class"`
 	StorageNotes string   `json:"storage_notes"`
 	Package      string   `json:"package"`
+	Version      *int64   `json:"version"`
 	owner
 }
 
@@ -406,11 +479,22 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request, u *auth.User
 	if err := b.validate(); err != nil {
 		return err
 	}
-	it, err := s.store.CreateItem(r.Context(), db.CreateItemParams{
-		Name: b.Name, Kind: b.Kind, CategoryID: b.CategoryID, Description: b.Description,
-		Manufacturer: b.Manufacturer, Mpn: b.Mpn, SupplierUrl: b.SupplierUrl, DatasheetUrl: b.DatasheetUrl,
-		Unit: b.Unit, MinStock: b.MinStock, HazardClass: b.HazardClass, StorageNotes: b.StorageNotes,
-		OwnerProjectID: b.OwnerProjectID, OwnerDepartmentID: b.OwnerDepartmentID, Package: b.Package,
+	var it db.Item
+	err := s.store.Tx(r.Context(), func(q *db.Queries) error {
+		// Same rule the importer uses to recognise an item it already has.
+		dup, err := q.FindItemByName(r.Context(), db.FindItemByNameParams{Name: b.Name, Kind: b.Kind, Package: b.Package})
+		if err == nil {
+			return badRequest(fmt.Sprintf("%s already exists as %s; add stock to it instead", dup.Name, codes.Format(codes.Item, dup.ID)))
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		it, err = q.CreateItem(r.Context(), db.CreateItemParams{
+			Name: b.Name, Kind: b.Kind, CategoryID: b.CategoryID, Description: b.Description,
+			Manufacturer: b.Manufacturer, Mpn: b.Mpn, SupplierUrl: b.SupplierUrl, DatasheetUrl: b.DatasheetUrl,
+			Unit: b.Unit, MinStock: b.MinStock, HazardClass: b.HazardClass, StorageNotes: b.StorageNotes,
+			OwnerProjectID: b.OwnerProjectID, OwnerDepartmentID: b.OwnerDepartmentID, Package: b.Package,
+		})
+		return err
 	})
 	if err != nil {
 		return err
@@ -459,13 +543,6 @@ func (s *Server) updateItem(w http.ResponseWriter, r *http.Request, u *auth.User
 	if err != nil {
 		return err
 	}
-	cur, err := s.store.GetItem(r.Context(), id)
-	if err != nil {
-		return err
-	}
-	if err := s.checkEdit(u, cur.OwnerProjectID, cur.OwnerDepartmentID); err != nil {
-		return err
-	}
 	var b itemBody
 	if err := decode(r, &b); err != nil {
 		return err
@@ -473,12 +550,26 @@ func (s *Server) updateItem(w http.ResponseWriter, r *http.Request, u *auth.User
 	if err := b.validate(); err != nil {
 		return err
 	}
-	// Giving it away is fine; you just can't edit it afterwards.
-	it, err := s.store.UpdateItem(r.Context(), db.UpdateItemParams{
-		Name: b.Name, Kind: b.Kind, CategoryID: b.CategoryID, Description: b.Description,
-		Manufacturer: b.Manufacturer, Mpn: b.Mpn, SupplierUrl: b.SupplierUrl, DatasheetUrl: b.DatasheetUrl,
-		Unit: b.Unit, MinStock: b.MinStock, HazardClass: b.HazardClass, StorageNotes: b.StorageNotes,
-		OwnerProjectID: b.OwnerProjectID, OwnerDepartmentID: b.OwnerDepartmentID, Package: b.Package, ID: id,
+	var it db.Item
+	err = s.store.Tx(r.Context(), func(q *db.Queries) error {
+		cur, err := q.GetItem(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		if err := s.checkEdit(u, cur.OwnerProjectID, cur.OwnerDepartmentID); err != nil {
+			return err
+		}
+		if err := inventory.CheckVersion(cur.Version, b.Version); err != nil {
+			return err
+		}
+		// Giving it away is fine; you just can't edit it afterwards.
+		it, err = q.UpdateItem(r.Context(), db.UpdateItemParams{
+			Name: b.Name, Kind: b.Kind, CategoryID: b.CategoryID, Description: b.Description,
+			Manufacturer: b.Manufacturer, Mpn: b.Mpn, SupplierUrl: b.SupplierUrl, DatasheetUrl: b.DatasheetUrl,
+			Unit: b.Unit, MinStock: b.MinStock, HazardClass: b.HazardClass, StorageNotes: b.StorageNotes,
+			OwnerProjectID: b.OwnerProjectID, OwnerDepartmentID: b.OwnerDepartmentID, Package: b.Package, ID: id,
+		})
+		return err
 	})
 	if err != nil {
 		return err

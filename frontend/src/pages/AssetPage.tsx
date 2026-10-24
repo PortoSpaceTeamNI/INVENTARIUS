@@ -287,6 +287,8 @@ function EditAssetSheet({ detail, onClose }: { detail: AssetDetail; onClose: () 
   const [status, setStatus] = useState<AssetStatus>(a.status);
   const [notes, setNotes] = useState(a.notes);
   const [owner, setOwner] = useState(ownerValue(a.owner_project_id, a.owner_department_id));
+  // The version the sheet was opened with, not whatever a refetch brings.
+  const [version] = useState(a.version);
   const [error, setError] = useState<unknown>(null);
   const { data: me } = useMe();
   const qc = useQueryClient();
@@ -304,6 +306,7 @@ function EditAssetSheet({ detail, onClose }: { detail: AssetDetail; onClose: () 
         notes,
         owner_project_id: o.project_id,
         owner_department_id: o.department_id,
+        version,
       });
       qc.invalidateQueries();
       onClose();

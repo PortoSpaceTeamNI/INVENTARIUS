@@ -9,6 +9,7 @@ const loc = (id: number, name: string, parent_id: number | null = null): Locatio
   parent_id,
   description: "",
   created_at: "",
+  version: 1,
 });
 
 describe("expandCodes", () => {

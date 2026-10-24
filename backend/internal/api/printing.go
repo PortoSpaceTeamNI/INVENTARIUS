@@ -144,28 +144,32 @@ func (s *Server) printJobOp(w http.ResponseWriter, r *http.Request, u *auth.User
 	if err != nil {
 		return err
 	}
-	j, err := s.store.GetPrintJob(r.Context(), id)
-	if err != nil {
+	if _, err := s.store.GetPrintJob(r.Context(), id); err != nil {
 		return err
 	}
-	var status string
+	// The status only changes if the job is still in an allowed state, so a
+	// cancel that loses the race with the printer is refused, not ignored.
+	var p db.ChangePrintJobStatusParams
+	var refused string
 	switch r.PathValue("op") {
 	case "retry":
-		if j.Status != "failed" && j.Status != "cancelled" && j.Status != "done" {
-			return badRequest("only finished jobs can be retried")
-		}
-		status = "queued"
+		p = db.ChangePrintJobStatusParams{Status: "queued", FromStatus: []string{"failed", "cancelled", "done"}}
+		refused = "only finished jobs can be retried"
 	case "cancel":
-		if j.Status != "queued" && j.Status != "failed" {
-			return badRequest("only waiting jobs can be cancelled")
-		}
-		status = "cancelled"
+		p = db.ChangePrintJobStatusParams{Status: "cancelled", FromStatus: []string{"queued", "failed"}}
+		refused = "only waiting jobs can be cancelled; it may be printing already"
 	default:
 		return errNotFound
 	}
-	if err := s.store.SetPrintJobStatus(r.Context(), db.SetPrintJobStatusParams{Status: status, Error: "", ID: id}); err != nil {
+	p.ID = id
+	n, err := s.store.ChangePrintJobStatus(r.Context(), p)
+	if err != nil {
 		return err
 	}
+	if n == 0 {
+		return badRequest(refused)
+	}
+	status := p.Status
 	if status == "queued" {
 		s.queue.Wake()
 	}

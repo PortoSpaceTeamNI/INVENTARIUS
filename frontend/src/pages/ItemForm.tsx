@@ -70,6 +70,8 @@ function ItemForm({ item, defaultLocation }: { item?: Item; defaultLocation: num
     owner: item ? ownerValue(item.owner_project_id, item.owner_department_id) : "",
   });
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
+  // The version the form was opened with, not whatever a refetch brings.
+  const [version] = useState(item?.version);
   const [add, setAdd] = useState<AddValues>(() => emptyAdd(defaultLocation));
   const [newCat, setNewCat] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -116,6 +118,7 @@ function ItemForm({ item, defaultLocation }: { item?: Item; defaultLocation: num
     const o = parseOwnerValue(owner);
     const body = {
       ...fields,
+      version,
       min_stock: f.min_stock === "" ? null : Number(f.min_stock.replace(",", ".")),
       owner_project_id: o.project_id,
       owner_department_id: o.department_id,

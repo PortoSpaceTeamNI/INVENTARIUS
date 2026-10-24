@@ -156,6 +156,16 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 	var imgs []image.Image
 	var ok []db.PrintJob
 	for _, j := range jobs {
+		// Claim the job first: if someone cancelled it since it was listed,
+		// it is no longer queued and is skipped.
+		n, err := q.store.ClaimPrintJob(ctx, j.ID)
+		if err != nil {
+			slog.Error("claim print job", "id", j.ID, "err", err)
+			continue
+		}
+		if n == 0 {
+			continue
+		}
 		img, err := q.render(j)
 		if err != nil {
 			q.setJob(ctx, j.ID, "failed", err.Error())
@@ -166,9 +176,6 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 	}
 	if len(ok) == 0 {
 		return true
-	}
-	for _, j := range ok {
-		q.setJob(ctx, j.ID, "printing", "")
 	}
 
 	q.mu.Lock()

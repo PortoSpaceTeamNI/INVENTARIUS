@@ -49,7 +49,8 @@ func isUnitKind(kind string) bool { return kind == "tool" || kind == "flight_hw"
 
 // importItems: POST /api/import/items?commit=1 with a CSV body. Without
 // commit it only validates and reports. With commit it refuses to write
-// anything unless every row is valid.
+// anything unless every row is valid, and it imports in one transaction: if
+// a row fails, nothing is imported.
 func (s *Server) importItems(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	rows, err := s.parseImport(http.MaxBytesReader(w, r.Body, 5<<20))
 	if err != nil {
@@ -64,14 +65,21 @@ func (s *Server) importItems(w http.ResponseWriter, r *http.Request, u *auth.Use
 	if !commit || !valid {
 		return writeJSON(w, result)
 	}
-	im := &importer{s: s, ctx: r.Context(), user: u, locs: map[string]int64{}, cats: map[string]int64{}}
-	if err := im.load(); err != nil {
-		return err
-	}
-	for _, row := range rows {
-		if err := im.apply(row); err != nil {
-			return badRequest(fmt.Sprintf("line %d: %v (rows before it were imported)", row.Line, err))
+	im := &importer{s: s, user: u, locs: map[string]int64{}, cats: map[string]int64{}}
+	err = s.store.TxContext(r.Context(), func(ctx context.Context, q *db.Queries) error {
+		im.ctx, im.q = ctx, q
+		if err := im.load(); err != nil {
+			return err
 		}
+		for _, row := range rows {
+			if err := im.apply(row); err != nil {
+				return badRequest(fmt.Sprintf("line %d: %v (nothing was imported)", row.Line, err))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	result["committed"] = true
 	result["created_items"] = im.createdItems
@@ -268,8 +276,10 @@ func (s *Server) parseOwner(o string) (inventory.Owner, error) {
 }
 
 type importer struct {
-	s            *Server
+	s *Server
+	// ctx carries the import's transaction; q runs in it.
 	ctx          context.Context
+	q            *db.Queries
 	user         *auth.User
 	locs, cats   map[string]int64 // "parentID/lowercase name" -> id
 	createdItems int
@@ -284,14 +294,14 @@ func key(parent *int64, name string) string {
 }
 
 func (im *importer) load() error {
-	locs, err := im.s.store.ListLocations(im.ctx)
+	locs, err := im.q.ListLocations(im.ctx)
 	if err != nil {
 		return err
 	}
 	for _, l := range locs {
 		im.locs[key(l.ParentID, l.Name)] = l.ID
 	}
-	cats, err := im.s.store.ListCategories(im.ctx)
+	cats, err := im.q.ListCategories(im.ctx)
 	if err != nil {
 		return err
 	}
@@ -329,7 +339,7 @@ func (im *importer) apply(row *importRow) error {
 	if c := f["category"]; c != "" {
 		var err error
 		catID, err = resolvePath(c, im.cats, func(parent *int64, name string) (int64, error) {
-			c, err := im.s.store.CreateCategory(ctx, db.CreateCategoryParams{ParentID: parent, Name: name})
+			c, err := im.q.CreateCategory(ctx, db.CreateCategoryParams{ParentID: parent, Name: name})
 			return c.ID, err
 		})
 		if err != nil {
@@ -343,7 +353,7 @@ func (im *importer) apply(row *importRow) error {
 		if unit == "" {
 			unit = "pcs"
 		}
-		item, err = im.s.store.CreateItem(ctx, db.CreateItemParams{
+		item, err = im.q.CreateItem(ctx, db.CreateItemParams{
 			Name: row.Name, Kind: row.Kind, CategoryID: catID, Description: f["description"],
 			Manufacturer: f["manufacturer"], Mpn: f["mpn"], SupplierUrl: f["supplier_url"],
 			DatasheetUrl: f["datasheet_url"], Unit: unit, MinStock: row.minStock,
@@ -363,7 +373,7 @@ func (im *importer) apply(row *importRow) error {
 	note := joinNote("imported", row.qtyNote)
 
 	locID, err := resolvePath(row.Location, im.locs, func(parent *int64, name string) (int64, error) {
-		l, err := im.s.store.CreateLocation(ctx, db.CreateLocationParams{ParentID: parent, Name: name})
+		l, err := im.q.CreateLocation(ctx, db.CreateLocationParams{ParentID: parent, Name: name})
 		return l.ID, err
 	})
 	if err != nil {
@@ -411,10 +421,10 @@ func joinNote(a, b string) string {
 // findItem matches an existing item by MPN, then by name and kind.
 func (im *importer) findItem(row *importRow) (db.Item, error) {
 	if mpn := row.fields["mpn"]; mpn != "" {
-		it, err := im.s.store.FindItemByMPN(im.ctx, mpn)
+		it, err := im.q.FindItemByMPN(im.ctx, mpn)
 		if !errors.Is(err, sql.ErrNoRows) {
 			return it, err
 		}
 	}
-	return im.s.store.FindItemByName(im.ctx, db.FindItemByNameParams{Name: row.Name, Kind: row.Kind, Package: row.fields["package"]})
+	return im.q.FindItemByName(im.ctx, db.FindItemByNameParams{Name: row.Name, Kind: row.Kind, Package: row.fields["package"]})
 }

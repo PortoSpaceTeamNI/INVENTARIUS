@@ -113,16 +113,10 @@ func (s *Server) updateStock(w http.ResponseWriter, r *http.Request, u *auth.Use
 	if err != nil {
 		return err
 	}
-	cur, err := s.store.GetStock(r.Context(), id)
-	if err != nil {
-		return err
-	}
-	if err := s.checkEdit(u, cur.OwnerProjectID, cur.OwnerDepartmentID); err != nil {
-		return err
-	}
 	var b struct {
 		Lot       string `json:"lot"`
 		ExpiresOn date   `json:"expires_on"`
+		Version   *int64 `json:"version"`
 		owner
 	}
 	if err := decode(r, &b); err != nil {
@@ -131,8 +125,22 @@ func (s *Server) updateStock(w http.ResponseWriter, r *http.Request, u *auth.Use
 	if err := b.owner.inv().Validate(); err != nil {
 		return err
 	}
-	st, err := s.store.UpdateStockDetails(r.Context(), db.UpdateStockDetailsParams{
-		Lot: b.Lot, ExpiresOn: b.ExpiresOn.t, OwnerProjectID: b.OwnerProjectID, OwnerDepartmentID: b.OwnerDepartmentID, ID: id,
+	var st db.Stock
+	err = s.store.Tx(r.Context(), func(q *db.Queries) error {
+		cur, err := q.GetStock(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		if err := s.checkEdit(u, cur.OwnerProjectID, cur.OwnerDepartmentID); err != nil {
+			return err
+		}
+		if err := inventory.CheckVersion(cur.Version, b.Version); err != nil {
+			return err
+		}
+		st, err = q.UpdateStockDetails(r.Context(), db.UpdateStockDetailsParams{
+			Lot: b.Lot, ExpiresOn: b.ExpiresOn.t, OwnerProjectID: b.OwnerProjectID, OwnerDepartmentID: b.OwnerDepartmentID, ID: id,
+		})
+		return err
 	})
 	if err != nil {
 		return err
@@ -221,6 +229,7 @@ type assetBody struct {
 	Status     string `json:"status"`
 	Notes      string `json:"notes"`
 	PrintLabel bool   `json:"print_label"`
+	Version    *int64 `json:"version"`
 	// Count creates several identical assets at once (e.g. 5 multimeters).
 	Count int `json:"count"`
 	owner
@@ -229,7 +238,7 @@ type assetBody struct {
 func (b assetBody) params() inventory.AssetParams {
 	return inventory.AssetParams{
 		ItemID: b.ItemID, Serial: b.Serial, LocationID: b.LocationID, Condition: b.Condition,
-		Status: b.Status, Notes: b.Notes, Owner: b.owner.inv(),
+		Status: b.Status, Notes: b.Notes, Owner: b.owner.inv(), Version: b.Version,
 	}
 }
 

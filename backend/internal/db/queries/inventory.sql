@@ -8,7 +8,12 @@ SELECT * FROM locations WHERE id = ?;
 INSERT INTO locations (parent_id, name, description) VALUES (?, ?, ?) RETURNING *;
 
 -- name: UpdateLocation :one
-UPDATE locations SET parent_id = ?, name = ?, description = ? WHERE id = ? RETURNING *;
+UPDATE locations SET parent_id = ?, name = ?, description = ?, version = version + 1 WHERE id = ? RETURNING *;
+
+-- name: FindLocationByName :one
+SELECT * FROM locations
+WHERE parent_id IS sqlc.narg(parent_id) AND name = sqlc.arg(name) COLLATE NOCASE AND id != sqlc.arg(exclude_id)
+LIMIT 1;
 
 -- name: DeleteLocation :exec
 DELETE FROM locations WHERE id = ?;
@@ -22,11 +27,19 @@ SELECT
 -- name: ListCategories :many
 SELECT * FROM categories ORDER BY name;
 
+-- name: GetCategory :one
+SELECT * FROM categories WHERE id = ?;
+
 -- name: CreateCategory :one
 INSERT INTO categories (parent_id, name) VALUES (?, ?) RETURNING *;
 
 -- name: UpdateCategory :one
-UPDATE categories SET parent_id = ?, name = ? WHERE id = ? RETURNING *;
+UPDATE categories SET parent_id = ?, name = ?, version = version + 1 WHERE id = ? RETURNING *;
+
+-- name: FindCategoryByName :one
+SELECT * FROM categories
+WHERE parent_id IS sqlc.narg(parent_id) AND name = sqlc.arg(name) COLLATE NOCASE AND id != sqlc.arg(exclude_id)
+LIMIT 1;
 
 -- name: DeleteCategory :exec
 DELETE FROM categories WHERE id = ?;
@@ -79,7 +92,7 @@ UPDATE items SET
     name = ?, kind = ?, category_id = ?, description = ?, manufacturer = ?, mpn = ?,
     supplier_url = ?, datasheet_url = ?, unit = ?, min_stock = ?, hazard_class = ?,
     storage_notes = ?, owner_project_id = ?, owner_department_id = ?, package = ?,
-    updated_at = CURRENT_TIMESTAMP
+    version = version + 1, updated_at = CURRENT_TIMESTAMP
 WHERE id = ? RETURNING *;
 
 -- name: SetItemPhoto :exec
@@ -128,7 +141,7 @@ UPDATE stock SET location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;
 
 -- name: UpdateStockDetails :one
 UPDATE stock SET lot = ?, expires_on = ?, owner_project_id = ?, owner_department_id = ?,
-    updated_at = CURRENT_TIMESTAMP
+    version = version + 1, updated_at = CURRENT_TIMESTAMP
 WHERE id = ? RETURNING *;
 
 -- name: DeleteStock :exec
@@ -155,11 +168,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateAsset :one
 UPDATE assets SET serial = ?, location_id = ?, condition = ?, status = ?, notes = ?,
-    owner_project_id = ?, owner_department_id = ?, updated_at = CURRENT_TIMESTAMP
+    owner_project_id = ?, owner_department_id = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
 WHERE id = ? RETURNING *;
 
 -- name: SetAssetState :exec
-UPDATE assets SET status = ?, location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;
+UPDATE assets SET status = ?, location_id = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?;
 
 -- name: DeleteAsset :exec
 DELETE FROM assets WHERE id = ?;
@@ -229,6 +242,14 @@ UPDATE print_jobs SET
     attempts = attempts + sqlc.arg(attempt_inc),
     printed_at = CASE WHEN sqlc.arg(status) = 'done' THEN CURRENT_TIMESTAMP ELSE printed_at END
 WHERE id = sqlc.arg(id);
+
+-- name: ClaimPrintJob :execrows
+UPDATE print_jobs SET status = 'printing' WHERE id = ? AND status = 'queued';
+
+-- name: ChangePrintJobStatus :execrows
+-- Moves a job to status only if it is still in one of the states from.
+UPDATE print_jobs SET status = sqlc.arg(status), error = ''
+WHERE id = sqlc.arg(id) AND status IN (sqlc.slice(from_status));
 
 -- name: RequeueInterruptedPrintJobs :exec
 UPDATE print_jobs SET status = 'queued' WHERE status = 'printing';
