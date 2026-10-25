@@ -54,11 +54,24 @@ func (c *fileConn) ReadPacket(deadline time.Time) ([]byte, error) {
 		return nil, fmt.Errorf("printer device does not support read deadlines: %w", err)
 	}
 	buf := make([]byte, 32)
-	n, err := io.ReadFull(c.f, buf)
-	if err != nil {
-		return nil, err
+	n := 0
+	for n < len(buf) {
+		m, err := c.f.Read(buf[n:])
+		n += m
+		// usblp returns 0 bytes (EOF) until the printer has something to send;
+		// the PT-E550W takes a few hundred ms to answer a status request.
+		if m == 0 && (err == nil || errors.Is(err, io.EOF)) {
+			if time.Now().After(deadline) {
+				return nil, os.ErrDeadlineExceeded
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
-	return buf[:n], nil
+	return buf, nil
 }
 
 // Status asks the printer for its status. It must not be called while printing.
