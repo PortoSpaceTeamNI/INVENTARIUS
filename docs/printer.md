@@ -15,20 +15,24 @@ installed and no Brother software is needed.
    ```
    If `lp0` is missing, run `sudo modprobe usblp`.
 3. The container runs with the `lp` group (gid 7) so it can open the device. Check with the
-   **Labels** page in the app: it should say *PT-E550W ready, 12 mm tape*.
+   **Labels** page in the app: it should say *PT-E550W ready* with *12 mm* or *24 mm* tape.
 
 ## Labels
 
 Every label code is a letter plus a number: `L` location, `I` item, `S` stock, `A` asset.
 
-| Type | Label length* | Notes |
-|---|---|---|
-| **Data Matrix** (default) | ≈ 8 mm | Smallest. Scan with the app's Scan button. |
-| QR | ≈ 11 mm | Encodes `https://inv.portospaceteam.pt/A107`, so any phone camera opens it. |
-| Code128 barcode | ≈ 26 mm | 1D barcode; long, but good for shelves. |
+| Type | Length on 12 mm* | On 24 mm* | Notes |
+|---|---|---|---|
+| **Data Matrix** (default) | ≈ 8 mm | ≈ 12 mm | Smallest. Scan with the app's Scan button. |
+| QR | ≈ 11 mm | ≈ 15 mm | Encodes `https://inv.portospaceteam.pt/A107`, so any phone camera opens it. |
+| Code128 barcode | ≈ 26 mm | ≈ 26 mm | 1D barcode; long, but good for shelves. |
 
 \* For a code like `A107`, including the 2 mm feed margin the printer adds at each end (the
 minimum it allows). A caption (e.g. the location name) makes the label longer.
+
+Labels are laid out for whatever tape is loaded when they print: **12 mm** or **24 mm**. On
+24 mm the code and text are twice as big, so they read from further away (e.g. on big boxes
+and cabinet doors). Previews in the app use the tape the printer last reported.
 
 The default is set with `INVENTARIUS_SYMBOLOGY`; any label can be printed in another format
 from its page.
@@ -61,4 +65,4 @@ first use:
 | *no such file* | Printer off or unplugged, or `usblp` not loaded. |
 | *did not answer* | Turn the printer off and on. Make sure nothing else (CUPS, P-touch Editor) is using it. |
 | *no tape / cover open / wrong tape loaded* | As it says. Then press *Retry* on the failed jobs. |
-| *printer has 24 mm tape loaded* | Labels are laid out for 12 mm tape; load 12 mm tape. |
+| *printer has 18 mm tape loaded; labels need 12 or 24 mm* | Load 12 or 24 mm tape, then press *Retry*. |

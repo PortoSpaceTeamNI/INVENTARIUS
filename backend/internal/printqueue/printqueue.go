@@ -20,8 +20,8 @@ import (
 	"inventarius/internal/ptouch"
 )
 
-// TapeMM is the only tape the team uses.
-const TapeMM = 12
+// fileTapeMM is the tape FilePrinter pretends to have loaded.
+const fileTapeMM = 12
 
 // Printer is implemented by *ptouch.Printer and FilePrinter.
 type Printer interface {
@@ -33,10 +33,14 @@ type Printer interface {
 type FilePrinter struct{ Dir string }
 
 func (f FilePrinter) Status(context.Context) (ptouch.Status, error) {
-	return ptouch.Status{Model: ptouch.ModelPTE550W, MediaWidth: TapeMM, MediaType: 0x01}, nil
+	return ptouch.Status{Model: ptouch.ModelPTE550W, MediaWidth: fileTapeMM, MediaType: 0x01}, nil
 }
 
-func (f FilePrinter) Print(_ context.Context, imgs []image.Image, _ int) (ptouch.Result, error) {
+func (f FilePrinter) Print(_ context.Context, imgs []image.Image, tapeMM int) (ptouch.Result, error) {
+	tape, err := labels.TapeFor(tapeMM)
+	if err != nil {
+		return ptouch.Result{}, err
+	}
 	if err := os.MkdirAll(f.Dir, 0o755); err != nil {
 		return ptouch.Result{}, err
 	}
@@ -46,7 +50,7 @@ func (f FilePrinter) Print(_ context.Context, imgs []image.Image, _ int) (ptouch
 		if err != nil {
 			return ptouch.Result{}, err
 		}
-		err = png.Encode(out, labels.Preview(img))
+		err = png.Encode(out, labels.Preview(img, tape))
 		out.Close()
 		if err != nil {
 			return ptouch.Result{}, err
@@ -71,7 +75,7 @@ type Queue struct {
 	store      *db.Store
 	printer    Printer // nil: printing disabled, jobs stay queued
 	batchDelay time.Duration
-	render     func(db.PrintJob) (image.Image, error)
+	render     func(db.PrintJob, labels.Tape) (image.Image, error)
 
 	wake chan struct{}
 
@@ -80,8 +84,8 @@ type Queue struct {
 	smu   sync.Mutex // guards state
 }
 
-// New creates a queue. render turns a job into a label image.
-func New(store *db.Store, p Printer, batchDelay time.Duration, render func(db.PrintJob) (image.Image, error)) *Queue {
+// New creates a queue. render turns a job into a label image for a tape.
+func New(store *db.Store, p Printer, batchDelay time.Duration, render func(db.PrintJob, labels.Tape) (image.Image, error)) *Queue {
 	return &Queue{
 		store: store, printer: p, batchDelay: batchDelay, render: render,
 		wake:  make(chan struct{}, 1),
@@ -153,6 +157,32 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 	if err != nil || len(jobs) == 0 {
 		return false
 	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.setBusy(true)
+	defer q.setBusy(false)
+	pctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	// Lay the labels out for the tape that is loaded now.
+	st, err := q.printer.Status(pctx)
+	if err == nil {
+		err = st.Err()
+	}
+	var tape labels.Tape
+	if err == nil {
+		tape, err = labels.TapeFor(st.MediaWidth)
+	}
+	if err != nil {
+		q.recordStatus(st, err)
+		slog.Warn("print failed", "labels", len(jobs), "err", err)
+		for _, j := range jobs {
+			q.setJob(ctx, j.ID, "failed", err.Error())
+		}
+		return false
+	}
+
 	var imgs []image.Image
 	var ok []db.PrintJob
 	for _, j := range jobs {
@@ -166,7 +196,7 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 		if n == 0 {
 			continue
 		}
-		img, err := q.render(j)
+		img, err := q.render(j, tape)
 		if err != nil {
 			q.setJob(ctx, j.ID, "failed", err.Error())
 			continue
@@ -178,13 +208,8 @@ func (q *Queue) printBatch(ctx context.Context) bool {
 		return true
 	}
 
-	q.mu.Lock()
-	q.setBusy(true)
-	pctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	res, err := q.printer.Print(pctx, imgs, TapeMM)
-	cancel()
-	q.setBusy(false)
-	q.mu.Unlock()
+	// Print checks the tape again, in case it was changed in between.
+	res, err := q.printer.Print(pctx, imgs, tape.MM)
 
 	q.recordStatus(res.Status, err)
 	status, msg := "done", ""

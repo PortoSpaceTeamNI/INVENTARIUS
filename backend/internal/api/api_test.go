@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,28 +20,39 @@ import (
 	"inventarius/internal/auth"
 	"inventarius/internal/config"
 	"inventarius/internal/db"
+	"inventarius/internal/labels"
 	"inventarius/internal/printqueue"
 	"inventarius/internal/ptouch"
 )
 
 // recordingPrinter counts printed labels per job.
 type recordingPrinter struct {
-	mu   sync.Mutex
-	jobs []int
-	fail error
+	mu      sync.Mutex
+	jobs    []int
+	fail    error
+	tapeMM  int   // loaded tape; 0 means 12 mm
+	heights []int // image height of every printed label
 }
 
 func (p *recordingPrinter) Status(context.Context) (ptouch.Status, error) {
-	return ptouch.Status{Model: ptouch.ModelPTE550W, MediaWidth: 12}, nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return ptouch.Status{Model: ptouch.ModelPTE550W, MediaWidth: cmp.Or(p.tapeMM, 12)}, nil
 }
 
-func (p *recordingPrinter) Print(_ context.Context, imgs []image.Image, _ int) (ptouch.Result, error) {
+func (p *recordingPrinter) Print(_ context.Context, imgs []image.Image, wantTapeMM int) (ptouch.Result, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.fail != nil {
 		return ptouch.Result{}, p.fail
 	}
+	if loaded := cmp.Or(p.tapeMM, 12); wantTapeMM != loaded {
+		return ptouch.Result{}, fmt.Errorf("printer has %d mm tape loaded, labels need %d mm", loaded, wantTapeMM)
+	}
 	p.jobs = append(p.jobs, len(imgs))
+	for _, img := range imgs {
+		p.heights = append(p.heights, img.Bounds().Dy())
+	}
 	return ptouch.Result{Confirmed: true}, nil
 }
 
@@ -73,7 +85,7 @@ func newEnv(t *testing.T) *env {
 	}
 	p := &recordingPrinter{}
 	var srv *Server
-	q := printqueue.New(store, p, cfg.PrintBatchDelay, func(j db.PrintJob) (image.Image, error) { return srv.RenderJob(j) })
+	q := printqueue.New(store, p, cfg.PrintBatchDelay, func(j db.PrintJob, t labels.Tape) (image.Image, error) { return srv.RenderJob(j, t) })
 	srv, err = New(ctx, cfg, store, auth.New(cfg, store), q, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -289,6 +301,34 @@ func TestPrintFailureAndRetry(t *testing.T) {
 	admin.do("POST", "/api/print", map[string]any{"labels": []map[string]string{{"code": "A999"}}}, 400, nil)
 	// Bags carry item labels; stock codes are never printed.
 	admin.do("POST", "/api/print", map[string]any{"labels": []map[string]string{{"code": "S1"}}}, 400, nil)
+}
+
+func TestPrintFollowsLoadedTape(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("ana@portospaceteam.pt")
+	var jobs []db.PrintJob
+	printLabel := func(tapeMM int) {
+		t.Helper()
+		e.printer.mu.Lock()
+		e.printer.tapeMM = tapeMM
+		e.printer.mu.Unlock()
+		admin.do("POST", "/api/locations", map[string]any{"name": fmt.Sprintf("Shelf %d", tapeMM), "print_label": true}, 200, nil)
+		waitFor(t, "job done", func() bool {
+			admin.do("GET", "/api/print/jobs", nil, 200, &jobs)
+			return len(jobs) > 0 && jobs[0].Status != "queued" && jobs[0].Status != "printing"
+		})
+	}
+
+	printLabel(24)
+	printLabel(12)
+	if h := e.printer.heights; len(h) != 2 || h[0] != labels.Tape24.BandDots || h[1] != labels.Tape12.BandDots {
+		t.Fatalf("label heights %v, want [%d %d]", h, labels.Tape24.BandDots, labels.Tape12.BandDots)
+	}
+
+	printLabel(18)
+	if jobs[0].Status != "failed" || !strings.Contains(jobs[0].Error, "12 or 24 mm") {
+		t.Fatalf("job on 18 mm tape: %s %q", jobs[0].Status, jobs[0].Error)
+	}
 }
 
 func TestImport(t *testing.T) {

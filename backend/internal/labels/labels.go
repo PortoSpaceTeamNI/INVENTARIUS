@@ -1,8 +1,9 @@
-// Package labels renders label images for 12 mm TZe tape at 180 dpi.
+// Package labels renders label images for 12 or 24 mm TZe tape at 180 dpi.
 //
 // An image is laid out with x along the tape (label length) and y across it.
-// Its height is the printable band of the tape (70 dots on 12 mm); the
-// printer adds a feed margin (2 mm minimum) before and after each label.
+// Its height is the printable band of the tape (70 dots on 12 mm, 128 on
+// 24 mm); the printer adds a feed margin (2 mm minimum) before and after
+// each label.
 package labels
 
 import (
@@ -40,11 +41,32 @@ func ParseSymbology(s string) (Symbology, error) {
 	return "", fmt.Errorf("unknown symbology %q", s)
 }
 
+// Tape is the label layout for one tape width. On wider tape, symbols and
+// text are drawn Scale times bigger, so labels read from further away.
+type Tape struct {
+	MM       int
+	BandDots int // printable height across the tape
+	TapeDots int // full tape width, for previews
+	Scale    int // size of symbols and text relative to 12 mm
+}
+
+var (
+	Tape12 = Tape{MM: 12, BandDots: 70, TapeDots: 85, Scale: 1}
+	Tape24 = Tape{MM: 24, BandDots: 128, TapeDots: 170, Scale: 2}
+)
+
+// TapeFor returns the layout for a tape width in mm.
+func TapeFor(mm int) (Tape, error) {
+	switch mm {
+	case 12:
+		return Tape12, nil
+	case 24:
+		return Tape24, nil
+	}
+	return Tape{}, fmt.Errorf("printer has %d mm tape loaded; labels need 12 or 24 mm", mm)
+}
+
 const (
-	// BandDots is the printable height of 12 mm tape.
-	BandDots = 70
-	// TapeDots is the full tape width, for previews.
-	TapeDots = 85
 	// MarginDots is the feed margin added by the printer on each side.
 	MarginDots = 14
 
@@ -61,20 +83,22 @@ type Spec struct {
 	URL       string    // payload for QR codes; defaults to the code
 }
 
-// Render draws the label. The result is BandDots high.
-func Render(s Spec) (*image.Gray, error) {
-	sym, err := symbol(s)
+// Render draws the label for tape t. The result is t.BandDots high.
+func Render(s Spec, t Tape) (*image.Gray, error) {
+	sym, err := symbol(s, t)
 	if err != nil {
 		return nil, err
 	}
-	codeW := textWidth(s.Code)
-	lineH := face.Height
+	k, band := t.Scale, t.BandDots
+	codeW := textWidth(s.Code, k)
+	lineH := face.Height * k
+	gap := gap * k
 
 	// Code text goes under the symbol if it fits, otherwise to its right.
-	below := sym.Bounds().Dy()+gap+lineH <= BandDots
+	below := sym.Bounds().Dy()+gap+lineH <= band
 	var captionLines []string
 	if s.Caption != "" {
-		captionLines = wrap(s.Caption, 18, BandDots/lineH-boolInt(!below))
+		captionLines = wrap(s.Caption, 18, band/lineH-boolInt(!below))
 	}
 
 	colW := sym.Bounds().Dx()
@@ -90,15 +114,15 @@ func Render(s Spec) (*image.Gray, error) {
 	textLines = append(textLines, captionLines...)
 	if len(textLines) > 0 {
 		// Wide enough to act as the symbol's quiet zone.
-		textX = colW + 12
+		textX = colW + 12*k
 		tw := 0
 		for _, l := range textLines {
-			tw = max(tw, textWidth(l))
+			tw = max(tw, textWidth(l, k))
 		}
 		w = textX + tw
 	}
 
-	img := image.NewGray(image.Rect(0, 0, w, BandDots))
+	img := image.NewGray(image.Rect(0, 0, w, band))
 	draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
 
 	symH := sym.Bounds().Dy()
@@ -106,16 +130,16 @@ func Render(s Spec) (*image.Gray, error) {
 	if below {
 		blockH += gap + lineH
 	}
-	top := (BandDots - blockH) / 2
+	top := (band - blockH) / 2
 	symX := (colW - sym.Bounds().Dx()) / 2
 	draw.Draw(img, sym.Bounds().Add(image.Pt(symX, top)), sym, image.Point{}, draw.Src)
 	if below {
-		drawText(img, (colW-codeW)/2, top+symH+gap, s.Code)
+		drawText(img, (colW-codeW)/2, top+symH+gap, s.Code, k)
 	}
 	if len(textLines) > 0 {
-		ty := (BandDots - len(textLines)*lineH) / 2
+		ty := (band - len(textLines)*lineH) / 2
 		for i, l := range textLines {
-			drawText(img, textX, ty+i*lineH, l)
+			drawText(img, textX, ty+i*lineH, l, k)
 		}
 	}
 	return img, nil
@@ -123,17 +147,18 @@ func Render(s Spec) (*image.Gray, error) {
 
 // symbol encodes and scales the code; quiet zones come from the tape edge
 // and the feed margins.
-func symbol(s Spec) (image.Image, error) {
+func symbol(s Spec, t Tape) (image.Image, error) {
 	var (
 		bc    barcode.Barcode
 		err   error
 		scale int
 		h     int // 1D bar height
 	)
+	band := t.BandDots
 	switch s.Symbology {
 	case DataMatrix:
 		bc, err = datamatrix.Encode(s.Code)
-		scale = 3
+		scale = 3 * t.Scale
 	case QR:
 		payload := s.URL
 		if payload == "" {
@@ -141,10 +166,12 @@ func symbol(s Spec) (image.Image, error) {
 		}
 		// Upper case keeps the QR in alphanumeric mode: a smaller symbol.
 		bc, err = qr.Encode(strings.ToUpper(payload), qr.L, qr.Auto)
-		scale = 2
+		scale = 2 * t.Scale
 	case Code128:
 		bc, err = code128.Encode(s.Code)
-		scale, h = 2, BandDots-gap-face.Height
+		// Taller bars on wider tape, but the same bar width: wider bars
+		// would only make the label longer.
+		scale, h = 2, band-(gap+face.Height)*t.Scale
 	default:
 		return nil, fmt.Errorf("unknown symbology %q", s.Symbology)
 	}
@@ -153,11 +180,16 @@ func symbol(s Spec) (image.Image, error) {
 	}
 	b := bc.Bounds()
 	if h == 0 {
+		// Keep room for the code text under the symbol if possible; text
+		// beside it makes the label much longer.
+		if fit := (band - (gap+face.Height)*t.Scale) / b.Dy(); fit >= 1 {
+			scale = min(scale, fit)
+		}
 		h = b.Dy() * scale
 	}
-	if h > BandDots {
-		// Fall back to the smallest scale that still fits.
-		scale = BandDots / b.Dy()
+	if h > band {
+		// Fall back to the largest scale that still fits.
+		scale = band / b.Dy()
 		if scale < 1 {
 			return nil, fmt.Errorf("%s symbol for %q is too big for the tape", s.Symbology, s.Code)
 		}
@@ -178,13 +210,13 @@ func symbol(s Spec) (image.Image, error) {
 	return out, nil
 }
 
-// Preview draws the label as it will come out: on a piece of tape with the
-// feed margins and the unprinted tape edges.
-func Preview(label image.Image) *image.Gray {
+// Preview draws the label as it will come out: on a piece of tape t with
+// the feed margins and the unprinted tape edges.
+func Preview(label image.Image, t Tape) *image.Gray {
 	w := label.Bounds().Dx() + 2*MarginDots
-	img := image.NewGray(image.Rect(0, 0, w, TapeDots))
+	img := image.NewGray(image.Rect(0, 0, w, t.TapeDots))
 	draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
-	draw.Draw(img, label.Bounds().Add(image.Pt(MarginDots, (TapeDots-BandDots)/2)), label, label.Bounds().Min, draw.Src)
+	draw.Draw(img, label.Bounds().Add(image.Pt(MarginDots, (t.TapeDots-t.BandDots)/2)), label, label.Bounds().Min, draw.Src)
 	return img
 }
 
@@ -193,18 +225,45 @@ func LengthMM(label image.Image) float64 {
 	return float64(label.Bounds().Dx()+2*MarginDots) * 25.4 / 180
 }
 
-func textWidth(s string) int {
-	return font.MeasureString(face, s).Ceil()
+func textWidth(s string, k int) int {
+	return font.MeasureString(face, s).Ceil() * k
 }
 
-func drawText(img draw.Image, x, y int, s string) {
+// drawText draws s with its top left at (x, y), k times the font's size.
+// The font is a bitmap, so it is scaled by repeating pixels.
+func drawText(img *image.Gray, x, y int, s string, k int) {
+	dst := img
+	if k > 1 {
+		dst = image.NewGray(image.Rect(0, 0, textWidth(s, 1), face.Height))
+		draw.Draw(dst, dst.Bounds(), image.White, image.Point{}, draw.Src)
+	}
 	d := font.Drawer{
-		Dst:  img,
+		Dst:  dst,
 		Src:  image.Black,
 		Face: face,
-		Dot:  fixed.P(x, y+face.Ascent),
+		Dot:  fixed.P(0, face.Ascent),
+	}
+	if k == 1 {
+		d.Dot = fixed.P(x, y+face.Ascent)
 	}
 	d.DrawString(s)
+	if k == 1 {
+		return
+	}
+	b := dst.Bounds()
+	for sy := 0; sy < b.Dy(); sy++ {
+		for sx := 0; sx < b.Dx(); sx++ {
+			c := dst.Pix[sy*dst.Stride+sx]
+			for dy := 0; dy < k; dy++ {
+				for dx := 0; dx < k; dx++ {
+					px, py := x+sx*k+dx, y+sy*k+dy
+					if image.Pt(px, py).In(img.Bounds()) {
+						img.Pix[py*img.Stride+px] = c
+					}
+				}
+			}
+		}
+	}
 }
 
 // wrap breaks s into at most maxLines lines of up to width characters,

@@ -6,7 +6,7 @@ Inventory for the Porto Space Team room: **what we have, where it is, and who ha
 - Shared tools and hardware, tracked one by one: borrow and return, and a "who has what" board.
 - Reservations: set parts or tools aside for something, so everyone sees what is free to use.
 - Every change is logged with who did it and for which project/department (INVICTUS, ICARUS).
-- Labels print automatically on the Brother PT-E550W (12 mm tape). Scanning a label opens its page.
+- Labels print automatically on the Brother PT-E550W (12 or 24 mm tape). Scanning a label opens its page.
 - Google sign-in for `@portospaceteam.pt` accounts.
 
 Stack: Go + SQLite backend, React + TypeScript (Vite) frontend, the same toolchain as ARX.
@@ -45,7 +45,7 @@ backend/
   internal/inventory/    stock and loan operations; each also writes the audit log
   internal/api/          HTTP API, permissions, CSV import, label endpoints
   internal/auth/         Google sign-in, sessions, dev login
-  internal/labels/       label rendering (Data Matrix / QR / Code128) for 12 mm tape
+  internal/labels/       label rendering (Data Matrix / QR / Code128) for 12 or 24 mm tape
   internal/ptouch/       Brother P-touch raster protocol over USB
   internal/printqueue/   batches label jobs and sends them to the printer
 frontend/src/            pages/, components/, api.ts (types mirror the Go JSON)

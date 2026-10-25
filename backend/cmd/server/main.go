@@ -19,6 +19,7 @@ import (
 	"inventarius/internal/auth"
 	"inventarius/internal/config"
 	"inventarius/internal/db"
+	"inventarius/internal/labels"
 	"inventarius/internal/printqueue"
 	"inventarius/internal/ptouch"
 	"inventarius/internal/web"
@@ -65,8 +66,8 @@ func run() error {
 	// The queue and server reference each other: the queue renders jobs with
 	// the server's label settings.
 	var srv *api.Server
-	queue := printqueue.New(store, printer, cfg.PrintBatchDelay, func(j db.PrintJob) (image.Image, error) {
-		return srv.RenderJob(j)
+	queue := printqueue.New(store, printer, cfg.PrintBatchDelay, func(j db.PrintJob, t labels.Tape) (image.Image, error) {
+		return srv.RenderJob(j, t)
 	})
 	srv, err = api.New(ctx, cfg, store, a, queue, webFS)
 	if err != nil {

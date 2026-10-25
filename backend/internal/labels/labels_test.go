@@ -1,6 +1,7 @@
 package labels
 
 import (
+	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
@@ -16,9 +17,9 @@ import (
 
 // decode scans the rendered label like a camera would: upscaled, with the
 // white tape and margins around it.
-func decode(t *testing.T, label image.Image, sym Symbology) string {
+func decode(t *testing.T, label image.Image, tp Tape, sym Symbology) string {
 	t.Helper()
-	tape := Preview(label)
+	tape := Preview(label, tp)
 	const k = 4
 	big := image.NewGray(image.Rect(0, 0, tape.Bounds().Dx()*k, tape.Bounds().Dy()*k))
 	for y := 0; y < big.Bounds().Dy(); y++ {
@@ -48,37 +49,46 @@ func decode(t *testing.T, label image.Image, sym Symbology) string {
 }
 
 func TestRenderDecodes(t *testing.T) {
+	qrURL := "https://inv.portospaceteam.pt/A107"
+	caption := "Shelf C bin 4 - M3 screws"
 	tests := []struct {
+		tape     Tape
 		spec     Spec
 		want     string
 		maxLenMM float64
 		aimW     int // decode only the first aimW dots, like a camera aimed at the code
 	}{
-		{Spec{Code: "A107", Symbology: DataMatrix}, "A107", 9, 0},
-		{Spec{Code: "L3", Symbology: DataMatrix}, "L3", 9, 0},
-		{Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 12, 0},
-		{Spec{Code: "A107", Symbology: QR, URL: "https://inv.portospaceteam.pt/A107"}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 12, 0},
-		{Spec{Code: "A107", Symbology: Code128}, "A107", 27, 0},
-		{Spec{Code: "L42", Symbology: DataMatrix, Caption: "Shelf C bin 4 - M3 screws"}, "L42", 40, 40},
+		{Tape12, Spec{Code: "A107", Symbology: DataMatrix}, "A107", 9, 0},
+		{Tape12, Spec{Code: "L3", Symbology: DataMatrix}, "L3", 9, 0},
+		{Tape12, Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 12, 0},
+		{Tape12, Spec{Code: "A107", Symbology: QR, URL: qrURL}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 12, 0},
+		{Tape12, Spec{Code: "A107", Symbology: Code128}, "A107", 27, 0},
+		{Tape12, Spec{Code: "L42", Symbology: DataMatrix, Caption: caption}, "L42", 40, 40},
+		{Tape24, Spec{Code: "A107", Symbology: DataMatrix}, "A107", 15, 0},
+		{Tape24, Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 18, 0},
+		{Tape24, Spec{Code: "A107", Symbology: QR, URL: qrURL}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 21, 0},
+		{Tape24, Spec{Code: "A107", Symbology: Code128}, "A107", 27, 0},
+		{Tape24, Spec{Code: "L42", Symbology: DataMatrix, Caption: caption}, "L42", 75, 80},
 	}
 	dir := os.Getenv("LABELS_OUT") // set to a directory to look at the PNGs
 	for _, tc := range tests {
-		t.Run(string(tc.spec.Symbology)+"_"+tc.spec.Code, func(t *testing.T) {
-			img, err := Render(tc.spec)
+		name := fmt.Sprintf("%dmm_%s_%s", tc.tape.MM, tc.spec.Symbology, tc.spec.Code)
+		t.Run(name, func(t *testing.T) {
+			img, err := Render(tc.spec, tc.tape)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if img.Bounds().Dy() != BandDots {
+			if img.Bounds().Dy() != tc.tape.BandDots {
 				t.Fatalf("height %d", img.Bounds().Dy())
 			}
 			if dir != "" {
-				writePNG(t, filepath.Join(dir, string(tc.spec.Symbology)+"_"+tc.spec.Code+".png"), Preview(img))
+				writePNG(t, filepath.Join(dir, name+".png"), Preview(img, tc.tape))
 			}
 			aimed := image.Image(img)
 			if tc.aimW > 0 {
-				aimed = img.SubImage(image.Rect(0, 0, tc.aimW, BandDots))
+				aimed = img.SubImage(image.Rect(0, 0, tc.aimW, tc.tape.BandDots))
 			}
-			if got := decode(t, aimed, tc.spec.Symbology); got != tc.want {
+			if got := decode(t, aimed, tc.tape, tc.spec.Symbology); got != tc.want {
 				t.Fatalf("decoded %q, want %q", got, tc.want)
 			}
 			if l := LengthMM(img); l > tc.maxLenMM {

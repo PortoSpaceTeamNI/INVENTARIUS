@@ -14,14 +14,14 @@ import (
 	"inventarius/internal/labels"
 )
 
-// RenderJob turns a stored print job into a label image; the print queue
-// calls it right before printing.
-func (s *Server) RenderJob(j db.PrintJob) (image.Image, error) {
+// RenderJob turns a stored print job into a label image for the loaded
+// tape; the print queue calls it right before printing.
+func (s *Server) RenderJob(j db.PrintJob, t labels.Tape) (image.Image, error) {
 	sym, err := labels.ParseSymbology(j.Symbology)
 	if err != nil {
 		return nil, err
 	}
-	img, err := labels.Render(labels.Spec{Code: j.Code, Caption: j.Caption, Symbology: sym, URL: s.labelURL(j.Code)})
+	img, err := labels.Render(labels.Spec{Code: j.Code, Caption: j.Caption, Symbology: sym, URL: s.labelURL(j.Code)}, t)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,8 @@ func (s *Server) defaultCaption(k codes.Kind, name string) string {
 }
 
 // labelPreview renders GET /api/labels/A107?symbology=qr&caption=... as a PNG
-// of the label on its tape, at printer resolution (180 dpi).
+// of the label on the tape last seen in the printer (12 mm if unknown), at
+// printer resolution (180 dpi).
 func (s *Server) labelPreview(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	k, id, err := codes.Parse(r.PathValue("code"))
 	if err != nil {
@@ -78,14 +79,19 @@ func (s *Server) labelPreview(w http.ResponseWriter, r *http.Request, u *auth.Us
 	if err != nil {
 		return badRequest(err.Error())
 	}
+	tape, err := labels.TapeFor(s.queue.State().TapeMM)
+	if err != nil {
+		tape = labels.Tape12
+	}
 	code := codes.Format(k, id)
-	img, err := labels.Render(labels.Spec{Code: code, Caption: r.URL.Query().Get("caption"), Symbology: sym, URL: s.labelURL(code)})
+	img, err := labels.Render(labels.Spec{Code: code, Caption: r.URL.Query().Get("caption"), Symbology: sym, URL: s.labelURL(code)}, tape)
 	if err != nil {
 		return badRequest(err.Error())
 	}
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	return png.Encode(w, labels.Preview(img))
+	// Not cached: the preview changes when other tape is loaded.
+	w.Header().Set("Cache-Control", "private, no-cache")
+	return png.Encode(w, labels.Preview(img, tape))
 }
 
 func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) error {

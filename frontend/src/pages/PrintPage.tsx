@@ -45,7 +45,7 @@ export function PrintPage() {
   const ready = p && !problem;
 
   return (
-    <Page title="Labels" subtitle="Brother PT-E550W · 12 mm tape">
+    <Page title="Labels" subtitle="Brother PT-E550W · 12 or 24 mm tape">
       <div className="layout-2">
         <div className="stack" style={{ gap: "1.25rem" }}>
           <BatchPrint />
@@ -146,8 +146,8 @@ export function PrintPage() {
                   <dt>Tape</dt>
                   <dd>
                     {p.tape_mm ? `${p.tape_mm} mm` : "—"}
-                    {p.tape_mm !== 0 && p.tape_mm !== 12 && (
-                      <span className="text-danger"> · labels need 12 mm</span>
+                    {p.tape_mm !== 0 && p.tape_mm !== 12 && p.tape_mm !== 24 && (
+                      <span className="text-danger"> · labels need 12 or 24 mm</span>
                     )}
                   </dd>
                   <dt>Checked</dt>
