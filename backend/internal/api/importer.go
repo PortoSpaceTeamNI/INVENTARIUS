@@ -22,7 +22,7 @@ import (
 var importColumns = []string{
 	"name", "kind", "category", "manufacturer", "mpn", "description", "unit", "min_stock",
 	"supplier_url", "datasheet_url", "quantity", "location", "lot", "expires_on", "serial", "owner",
-	"package", "status", "reserved", "reserved_for", "reserved_note",
+	"package", "status", "reserved", "reserved_for", "reserved_note", "label",
 }
 
 type importRow struct {
@@ -358,7 +358,7 @@ func (im *importer) apply(row *importRow) error {
 			Manufacturer: f["manufacturer"], Mpn: f["mpn"], SupplierUrl: f["supplier_url"],
 			DatasheetUrl: f["datasheet_url"], Unit: unit, MinStock: row.minStock,
 			OwnerProjectID: row.owner.ProjectID, OwnerDepartmentID: row.owner.DepartmentID,
-			Package: f["package"],
+			Package: f["package"], LabelText: f["label"],
 		})
 		if err == nil {
 			im.createdItems++

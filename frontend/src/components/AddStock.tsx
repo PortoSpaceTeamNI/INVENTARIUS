@@ -24,7 +24,8 @@ export const emptyAdd = (location: number | null = null): AddValues => ({
   lot: "",
   expires: "",
   serial: "",
-  print: true,
+  // Labels for stock and units are printed only when asked for.
+  print: false,
   countState: "exact",
 });
 
@@ -129,9 +130,15 @@ export function AddFields(props: {
 }
 
 /** Adds stock to a location, or registers new units of a tool. */
-export function AddSheet(props: { open: boolean; onClose: () => void; item: Item }) {
+export function AddSheet(props: {
+  open: boolean;
+  onClose: () => void;
+  item: Item;
+  /** Values to start from, e.g. read from a distributor's bag label. */
+  initial?: Partial<AddValues>;
+}) {
   const units = isUnitKind(props.item.kind);
-  const [v, setV] = useState<AddValues>(() => ({ ...emptyAdd(), amount: "1" }));
+  const [v, setV] = useState<AddValues>(() => ({ ...emptyAdd(), amount: "1", ...props.initial }));
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();

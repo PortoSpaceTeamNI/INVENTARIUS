@@ -85,6 +85,14 @@ const exact: Record<string, string> = {
   '"all" of an uncounted lot can\'t be reserved; give a number':
     'não se pode reservar "all" de um lote não contado; indica um número',
   "reserve whole units": "reserva unidades inteiras",
+  // part lookup
+  "part not found at Mouser": "A Mouser não conhece esta referência.",
+  "part lookup is not set up (INVENTARIUS_MOUSER_API_KEY)":
+    "A pesquisa de componentes não está configurada (INVENTARIUS_MOUSER_API_KEY).",
+  "could not fetch the image": "Não foi possível obter a imagem.",
+  "not a Mouser image link": "Não é um link de imagem da Mouser.",
+  "mpn is required": "A referência é obrigatória.",
+  "the Mouser API key is not valid": "A chave da API da Mouser não é válida.",
   // history notes
   "first count": "primeira contagem",
   "marked as not counted": "marcado como não contado",

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, MapPin, Plus, Search } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, get, type Location } from "../api";
 import { LocationSelect } from "../components/pickers";
@@ -201,6 +201,15 @@ export function NewLocationSheet(props: { open: boolean; onClose: () => void; pa
   const qc = useQueryClient();
   const navigate = useNavigate();
   const t = useT();
+
+  // Each time it opens, start inside the place it was opened from: the
+  // sheet stays mounted while moving between places' pages.
+  useEffect(() => {
+    if (props.open) {
+      setParent(props.parentId ?? null);
+      setError(null);
+    }
+  }, [props.open, props.parentId]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

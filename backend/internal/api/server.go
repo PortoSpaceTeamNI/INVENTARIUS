@@ -22,6 +22,7 @@ import (
 	"inventarius/internal/config"
 	"inventarius/internal/db"
 	"inventarius/internal/inventory"
+	"inventarius/internal/parts"
 	"inventarius/internal/printqueue"
 )
 
@@ -31,7 +32,8 @@ type Server struct {
 	inv   *inventory.Service
 	auth  *auth.Auth
 	queue *printqueue.Queue
-	web   fs.FS // built frontend; nil in tests
+	web   fs.FS         // built frontend; nil in tests
+	parts *parts.Mouser // nil without an API key
 
 	departments []db.Department // static seed data, loaded once
 }
@@ -41,10 +43,14 @@ func New(ctx context.Context, cfg config.Config, store *db.Store, a *auth.Auth, 
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	srv := &Server{
 		cfg: cfg, store: store, inv: &inventory.Service{Store: store}, auth: a, queue: q, web: web,
 		departments: deps,
-	}, nil
+	}
+	if cfg.MouserAPIKey != "" {
+		srv.parts = &parts.Mouser{APIKey: cfg.MouserAPIKey}
+	}
+	return srv, nil
 }
 
 func (s *Server) photoDir() string { return filepath.Join(s.cfg.DataDir, "photos") }
@@ -61,6 +67,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PATCH /api/users/{id}", h(s.updateUser))
 
 	mux.Handle("GET /api/search", h(s.search))
+	mux.Handle("GET /api/parts", h(s.partLookup))
+	mux.Handle("GET /api/parts/image", h(s.partImage))
 	mux.Handle("GET /api/codes/{code}", h(s.resolveCode))
 
 	mux.Handle("GET /api/locations", h(s.listLocations))

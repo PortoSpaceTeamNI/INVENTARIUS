@@ -35,6 +35,27 @@ export interface Meta {
   departments: Department[];
   symbology: Symbology;
   label_url: string;
+  /** Whether GET /api/parts (Mouser lookup) is set up on the server. */
+  part_lookup: boolean;
+}
+
+/** What the distributor's catalogue knows about a part (GET /api/parts). */
+export interface PartInfo {
+  mpn: string;
+  manufacturer: string;
+  description: string;
+  category: string;
+  package: string;
+  datasheet_url: string;
+  product_url: string;
+  image_url: string;
+  supplier_part: string;
+  /** The team's category for this kind of part, if one exists... */
+  category_id: number | null;
+  /** ...otherwise a name for a new one ("Condensadores"), or "". */
+  new_category: string;
+  /** Short text for labels ("Capacitors 1uF 0402"). */
+  label_text: string;
 }
 
 export interface Owned {
@@ -76,6 +97,8 @@ export interface Item extends Owned {
   storage_notes: string;
   /** Package / footprint, e.g. "0603". */
   package: string;
+  /** Short text printed on labels instead of the name; "" for the name. */
+  label_text: string;
   created_at: string;
   updated_at: string;
   version: number;

@@ -25,6 +25,7 @@ func (s *Server) meta(w http.ResponseWriter, r *http.Request, u *auth.User) erro
 		"departments": s.departments,
 		"symbology":   s.cfg.Symbology,
 		"label_url":   s.cfg.LabelURL,
+		"part_lookup": s.parts != nil,
 	})
 }
 

@@ -6,7 +6,7 @@ Inventory for the Porto Space Team room: **what we have, where it is, and who ha
 - Shared tools and hardware, tracked one by one: borrow and return, and a "who has what" board.
 - Reservations: set parts or tools aside for something, so everyone sees what is free to use.
 - Every change is logged with who did it and for which project/department (INVICTUS, ICARUS).
-- Labels print automatically on the Brother PT-E550W (12 or 24 mm tape). Scanning a label opens its page.
+- Labels print on the Brother PT-E550W (12 or 24 mm tape): new places automatically, stock and units when asked for. Scanning a label opens its page.
 - Google sign-in for `@portospaceteam.pt` accounts.
 
 Stack: Go + SQLite backend, React + TypeScript (Vite) frontend, the same toolchain as ARX.

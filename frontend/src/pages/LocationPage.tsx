@@ -19,7 +19,7 @@ import {
   useToast,
 } from "../components/ui";
 import { useT } from "../i18n";
-import { code, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
+import { code, errorMessage, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
 import { NewLocationSheet, useLocationCounts } from "./LocationsPage";
 
 export function LocationPage() {
@@ -38,6 +38,7 @@ export function LocationPage() {
   );
   const qc = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
   const t = useT();
 
   if (q.isPending) return <Loading />;
@@ -45,6 +46,24 @@ export function LocationPage() {
   const { location: loc, path, children, stock, assets } = q.data;
   const empty = children.length === 0 && stock.length === 0 && assets.length === 0;
   const things = stock.length + assets.length;
+
+  async function deletePlace() {
+    if (!empty) {
+      toast(t.loc.notEmpty(children.length, things), "error");
+      return;
+    }
+    if (!confirm(t.loc.confirmDelete(loc.name))) return;
+    try {
+      await api("DELETE", `/api/locations/${loc.id}`);
+      qc.invalidateQueries({ queryKey: ["locations"] });
+      qc.invalidateQueries({ queryKey: ["location"] });
+      qc.invalidateQueries({ queryKey: ["location-counts"] });
+      toast(t.loc.deleted(loc.name));
+      navigate(loc.parent_id ? `/locations/${loc.parent_id}` : "/locations", { replace: true });
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
 
   return (
     <Page
@@ -77,7 +96,16 @@ export function LocationPage() {
           <Menu
             label={t.common.more}
             trigger={<MoreHorizontal size={18} />}
-            items={[{ label: t.loc.editPlace, icon: <Pencil size={15} />, onSelect: () => setEditing(true) }]}
+            items={[
+              { label: t.loc.editPlace, icon: <Pencil size={15} />, onSelect: () => setEditing(true) },
+              me?.role === "admin" && {
+                label: t.loc.deletePlace,
+                icon: <Trash2 size={15} />,
+                onSelect: deletePlace,
+                danger: true,
+                separatorBefore: true,
+              },
+            ]}
           />
         </>
       }
@@ -287,6 +315,8 @@ function EditLocationSheet(props: { onClose: () => void; detail: LocationDetail;
     try {
       await api("DELETE", `/api/locations/${loc.id}`);
       qc.invalidateQueries({ queryKey: ["locations"] });
+      qc.invalidateQueries({ queryKey: ["location"] });
+      qc.invalidateQueries({ queryKey: ["location-counts"] });
       navigate(loc.parent_id ? `/locations/${loc.parent_id}` : "/locations", { replace: true });
     } catch (err) {
       setError(err);

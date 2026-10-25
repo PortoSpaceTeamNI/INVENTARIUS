@@ -275,7 +275,7 @@ export function StockPage() {
             </div>
           </Card>
           <Card title={t.common.label}>
-            <LabelCard code={code.item(item.id)} caption={item.name} bare />
+            <LabelCard code={code.item(item.id)} caption={item.label_text || item.name} bare />
           </Card>
         </div>
       </div>

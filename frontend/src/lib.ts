@@ -26,9 +26,13 @@ export const useMeta = () =>
 export const useLocations = () =>
   useQuery({ queryKey: ["locations"], queryFn: () => get<Location[]>("/api/locations") });
 
-/** Every item with its totals; shared by the dashboard and the item list. */
-export const useAllItems = () =>
-  useQuery({ queryKey: ["items", "all"], queryFn: () => get<ItemSummary[]>("/api/items?limit=5000") });
+/** Every item with its totals; shared by the dashboard, the item list and scanning. */
+export const allItemsQuery = {
+  queryKey: ["items", "all"],
+  queryFn: () => get<ItemSummary[]>("/api/items?limit=5000"),
+};
+
+export const useAllItems = () => useQuery(allItemsQuery);
 
 export const isUnitKind = (k: ItemKind) => k === "tool" || k === "flight_hw";
 

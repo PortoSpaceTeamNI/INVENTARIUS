@@ -84,15 +84,16 @@ SELECT * FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? C
 -- name: CreateItem :one
 INSERT INTO items (
     name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url,
-    unit, min_stock, hazard_class, storage_notes, owner_project_id, owner_department_id, package
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
+    unit, min_stock, hazard_class, storage_notes, owner_project_id, owner_department_id, package,
+    label_text
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateItem :one
 UPDATE items SET
     name = ?, kind = ?, category_id = ?, description = ?, manufacturer = ?, mpn = ?,
     supplier_url = ?, datasheet_url = ?, unit = ?, min_stock = ?, hazard_class = ?,
     storage_notes = ?, owner_project_id = ?, owner_department_id = ?, package = ?,
-    version = version + 1, updated_at = CURRENT_TIMESTAMP
+    label_text = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
 WHERE id = ? RETURNING *;
 
 -- name: SetItemPhoto :exec

@@ -182,7 +182,7 @@ export const en = {
     datasheetLink: "Datasheet link",
     itemLabel: "Item label",
     labelHintUnits: "Usually you label the units; this one opens the item page.",
-    labelHintStock: "Stick this on every bag of this item; scanning it opens the item page.",
+    labelHintStock: "Put it on the drawer or bag: scanning it opens this page.",
   },
 
   form: {
@@ -194,6 +194,14 @@ export const en = {
       hazmat: "Counted like parts, with hazard and storage notes.",
       flight_hw: "Rocket hardware, tracked unit by unit.",
     },
+    fromBag: (mpn: string) =>
+      `Filled in from the bag label of ${mpn}. Give it a clear name (what it is, its value), check the type and category, and choose where it goes.`,
+    lookUp: "Fill in from Mouser",
+    lookingUp: "Looking it up at Mouser…",
+    lookedUp:
+      "Filled in from Mouser: name, category, footprint, datasheet, product page, photo, where Mouser has them. Check them.",
+    lookupNotFound: "Mouser doesn't know this part number.",
+    lookupHint: "Type the part number to fill in the rest from Mouser.",
     basics: "Basics",
     basicsHint: "What it is and who it belongs to.",
     namePh: "e.g. BMP390 pressure sensor breakout",
@@ -207,6 +215,10 @@ export const en = {
     mpn: "Part number (MPN)",
     packageFootprint: "Package / footprint",
     packagePh: "e.g. 0603, SOT-23, TO-220",
+    labelText: "Label text",
+    labelTextPh: "Short text for labels",
+    labelTextHint:
+      "Printed on labels instead of the name, e.g. “Capacitors 1uF 0402”. Empty prints the name.",
     stock: "Stock",
     stockHint: "How it's counted and when to warn.",
     warnBelow: "Warn when below",
@@ -335,6 +347,9 @@ export const en = {
     editSubtitle: "Moving it moves everything inside it too.",
     descriptionPh: "e.g. Grey cabinet by the window",
     deletePlace: "Delete place",
+    notEmpty: (places: number, things: number) =>
+      `Empty it first: it still holds ${[places && `${places} ${places === 1 ? "place" : "places"}`, things && `${things} ${things === 1 ? "thing" : "things"}`].filter(Boolean).join(" and ")}.`,
+    deleted: (n: string) => `Deleted ${n}`,
   },
 
   loans: {
@@ -391,7 +406,8 @@ export const en = {
     notSetUp: "Not set up on the server",
     recent: "Recent print jobs",
     noneYet: "No labels printed yet",
-    noneHint: "Labels print automatically when you create places, add stock and register units.",
+    noneHint:
+      "Labels print when you create a place, or when you tick the print box while adding stock or units. Or print them from any page.",
     printAgain: "Print again",
     tryAgain: "Try again",
     reprint: "Reprint",
@@ -449,6 +465,7 @@ export const en = {
       ["owner", "Empty (team), INVICTUS, or ICARUS/Telemetry."],
       ["status", "For tools: available or broken."],
       ["reserved, reserved_note", "A number or “all”, and what it's for."],
+      ["label", "Short text for labels, e.g. 1uF 0402."],
       [
         "unit, min_stock, lot, expires_on, serial, description, datasheet_url, supplier_url",
         "Optional extras.",
@@ -551,7 +568,7 @@ export const en = {
     expiry: "Expiry date",
     lot: "Lot / batch",
     printUnits: "Print a label for each unit",
-    printStock: "Print the item label for this bag",
+    printStock: "Print the item's label",
     addedPrinted: "Added — label sent to the printer",
     added: "Added",
   },

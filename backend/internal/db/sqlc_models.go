@@ -57,6 +57,7 @@ type Item struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 	Package           string    `json:"package"`
 	Version           int64     `json:"version"`
+	LabelText         string    `json:"label_text"`
 }
 
 type Loan struct {

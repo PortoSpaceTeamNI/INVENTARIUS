@@ -50,6 +50,7 @@ describe("formatting", () => {
       departments: [{ id: 4, project_id: 1, name: "Propulsion" }],
       symbology: "datamatrix",
       label_url: "",
+      part_lookup: false,
     };
     expect(forLabel(meta, null, 4)).toBe("INVICTUS · Propulsion");
     expect(forLabel(meta, 1, null)).toBe("INVICTUS");

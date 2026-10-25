@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ExternalLink, MoreHorizontal, Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, type Category, get, type ItemDetail } from "../api";
 import { AddSheet } from "../components/AddStock";
 import { LabelCard } from "../components/LabelCard";
@@ -55,7 +55,12 @@ export function ItemPage() {
   const { data: locs } = useLocations();
   const { data: me } = useMe();
   const paths = useMemo(() => locationPaths(locs), [locs]);
-  const [adding, setAdding] = useState(false);
+  // ?add=100&lot=... (from scanning a part bag) opens Add stock filled in.
+  const [params, setParams] = useSearchParams();
+  const [bag] = useState(() =>
+    params.has("add") ? { amount: params.get("add") || "1", lot: params.get("lot") ?? "" } : undefined,
+  );
+  const [adding, setAdding] = useState(bag !== undefined);
   const photoInput = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const toast = useToast();
@@ -381,12 +386,22 @@ export function ItemPage() {
             <p className="small muted" style={{ padding: "0.85rem 1.1rem 0" }}>
               {units ? t.item.labelHintUnits : t.item.labelHintStock}
             </p>
-            <LabelCard code={`I${item.id}`} caption={item.name} bare />
+            <LabelCard code={`I${item.id}`} caption={item.label_text || item.name} bare />
           </Card>
         </div>
       </div>
 
-      {adding && <AddSheet open onClose={() => setAdding(false)} item={item} />}
+      {adding && (
+        <AddSheet
+          open
+          onClose={() => {
+            setAdding(false);
+            if (params.has("add")) setParams({}, { replace: true });
+          }}
+          item={item}
+          initial={bag}
+        />
+      )}
     </Page>
   );
 }

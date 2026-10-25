@@ -215,7 +215,7 @@ export function AssetPage() {
             </div>
           </Card>
           <Card title={t.common.label}>
-            <LabelCard code={`A${asset.id}`} caption={item.name} bare />
+            <LabelCard code={`A${asset.id}`} caption={item.label_text || item.name} bare />
           </Card>
         </div>
       </div>

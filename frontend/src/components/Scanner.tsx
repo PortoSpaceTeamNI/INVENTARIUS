@@ -15,6 +15,15 @@ prepareZXingModule({
 const FORMATS = ["data_matrix", "qr_code", "code_128"] as const;
 
 /**
+ * The code to use when several are in view: part bags carry a Data Matrix
+ * next to plain barcodes (order number, quantity, ...), and the 2D code is
+ * the one that says what the part is.
+ */
+function pick(found: { format: string; rawValue: string }[]): string | undefined {
+  return (found.find((f) => f.format !== "code_128") ?? found[0])?.rawValue;
+}
+
+/**
  * Live camera view that calls onCode with each decoded label. Where the
  * browser gives no live camera (plain http, permission denied), it offers
  * taking a photo instead: the file input opens the phone's camera app on any
@@ -71,8 +80,7 @@ export function Scanner({ onCode, paused }: { onCode: (text: string) => void; pa
       const v = video.current;
       if (v && v.readyState >= 2 && !pausedRef.current) {
         try {
-          const found = await detector.detect(v);
-          const text = found[0]?.rawValue;
+          const text = pick(await detector.detect(v));
           // Ignore the same code seen again within 2 s.
           if (text && (text !== last || Date.now() - lastAt > 2000)) {
             last = text;
@@ -105,8 +113,7 @@ export function Scanner({ onCode, paused }: { onCode: (text: string) => void; pa
   async function readPhoto(file: File) {
     setPhoto("reading");
     try {
-      const found = await new BarcodeDetector({ formats: [...FORMATS] }).detect(file);
-      const text = found[0]?.rawValue;
+      const text = pick(await new BarcodeDetector({ formats: [...FORMATS] }).detect(file));
       if (text) {
         setPhoto(null);
         onCodeRef.current(text);

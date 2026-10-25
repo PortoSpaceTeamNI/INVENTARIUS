@@ -54,10 +54,10 @@ func (s *Server) enqueueLabel(ctx context.Context, u *auth.User, k codes.Kind, i
 	}
 }
 
-// defaultCaption: only locations get a name on the label by default; on
-// items and assets the code alone keeps the label at ~8 mm.
+// defaultCaption: locations get their name on the label, items their short
+// label text (if any); on assets the code alone keeps the label short.
 func (s *Server) defaultCaption(k codes.Kind, name string) string {
-	if k == codes.Location {
+	if k == codes.Location || k == codes.Item {
 		return name
 	}
 	return ""

@@ -38,6 +38,10 @@ type Config struct {
 	// Rotate printed labels 180° if they come out upside down.
 	PrintFlip bool
 
+	// Mouser Search API key, to fill in new items (description, datasheet,
+	// image) from a part number. "" turns the lookup off.
+	MouserAPIKey string
+
 	SessionTTL time.Duration
 }
 
@@ -51,6 +55,7 @@ func Load() (Config, error) {
 		AllowedDomain:      env("INVENTARIUS_ALLOWED_DOMAIN", "portospaceteam.pt"),
 		Printer:            os.Getenv("INVENTARIUS_PRINTER"),
 		Symbology:          env("INVENTARIUS_SYMBOLOGY", "datamatrix"),
+		MouserAPIKey:       strings.TrimSpace(os.Getenv("INVENTARIUS_MOUSER_API_KEY")),
 		SessionTTL:         30 * 24 * time.Hour,
 	}
 	c.LabelURL = strings.TrimRight(env("INVENTARIUS_LABEL_URL", c.BaseURL), "/")

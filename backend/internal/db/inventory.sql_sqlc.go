@@ -160,8 +160,9 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 const createItem = `-- name: CreateItem :one
 INSERT INTO items (
     name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url,
-    unit, min_stock, hazard_class, storage_notes, owner_project_id, owner_department_id, package
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version
+    unit, min_stock, hazard_class, storage_notes, owner_project_id, owner_department_id, package,
+    label_text
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text
 `
 
 type CreateItemParams struct {
@@ -180,6 +181,7 @@ type CreateItemParams struct {
 	OwnerProjectID    *int64   `json:"owner_project_id"`
 	OwnerDepartmentID *int64   `json:"owner_department_id"`
 	Package           string   `json:"package"`
+	LabelText         string   `json:"label_text"`
 }
 
 func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, error) {
@@ -199,6 +201,7 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		arg.OwnerProjectID,
 		arg.OwnerDepartmentID,
 		arg.Package,
+		arg.LabelText,
 	)
 	var i Item
 	err := row.Scan(
@@ -222,6 +225,7 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		&i.UpdatedAt,
 		&i.Package,
 		&i.Version,
+		&i.LabelText,
 	)
 	return i, err
 }
@@ -477,7 +481,7 @@ func (q *Queries) FindCategoryByName(ctx context.Context, arg FindCategoryByName
 }
 
 const findItemByMPN = `-- name: FindItemByMPN :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version FROM items WHERE mpn = ? AND mpn != '' LIMIT 1
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text FROM items WHERE mpn = ? AND mpn != '' LIMIT 1
 `
 
 func (q *Queries) FindItemByMPN(ctx context.Context, mpn string) (Item, error) {
@@ -504,12 +508,13 @@ func (q *Queries) FindItemByMPN(ctx context.Context, mpn string) (Item, error) {
 		&i.UpdatedAt,
 		&i.Package,
 		&i.Version,
+		&i.LabelText,
 	)
 	return i, err
 }
 
 const findItemByName = `-- name: FindItemByName :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? COLLATE NOCASE ORDER BY id LIMIT 1
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? COLLATE NOCASE ORDER BY id LIMIT 1
 `
 
 type FindItemByNameParams struct {
@@ -542,6 +547,7 @@ func (q *Queries) FindItemByName(ctx context.Context, arg FindItemByNameParams) 
 		&i.UpdatedAt,
 		&i.Package,
 		&i.Version,
+		&i.LabelText,
 	)
 	return i, err
 }
@@ -661,7 +667,7 @@ func (q *Queries) GetCategory(ctx context.Context, id int64) (Category, error) {
 }
 
 const getItem = `-- name: GetItem :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version FROM items WHERE id = ?
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text FROM items WHERE id = ?
 `
 
 func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
@@ -688,6 +694,7 @@ func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
 		&i.UpdatedAt,
 		&i.Package,
 		&i.Version,
+		&i.LabelText,
 	)
 	return i, err
 }
@@ -906,7 +913,7 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 }
 
 const listItemSummaries = `-- name: ListItemSummaries :many
-SELECT items.id, items.name, items.kind, items.category_id, items.description, items.manufacturer, items.mpn, items.supplier_url, items.datasheet_url, items.unit, items.min_stock, items.photo, items.hazard_class, items.storage_notes, items.owner_project_id, items.owner_department_id, items.created_at, items.updated_at, items.package, items.version,
+SELECT items.id, items.name, items.kind, items.category_id, items.description, items.manufacturer, items.mpn, items.supplier_url, items.datasheet_url, items.unit, items.min_stock, items.photo, items.hazard_class, items.storage_notes, items.owner_project_id, items.owner_department_id, items.created_at, items.updated_at, items.package, items.version, items.label_text,
     CAST(COALESCE((SELECT sum(s.quantity) FROM stock s
         WHERE s.item_id = items.id AND s.count_state != 'uncounted'), 0) AS REAL) AS total_quantity,
     CAST((SELECT count(*) FROM stock s WHERE s.item_id = items.id AND s.count_state = 'uncounted') AS INTEGER) AS uncounted_lots,
@@ -957,6 +964,7 @@ type ListItemSummariesRow struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 	Package           string    `json:"package"`
 	Version           int64     `json:"version"`
+	LabelText         string    `json:"label_text"`
 	TotalQuantity     float64   `json:"total_quantity"`
 	UncountedLots     int64     `json:"uncounted_lots"`
 	ApproxLots        int64     `json:"approx_lots"`
@@ -1001,6 +1009,7 @@ func (q *Queries) ListItemSummaries(ctx context.Context, arg ListItemSummariesPa
 			&i.UpdatedAt,
 			&i.Package,
 			&i.Version,
+			&i.LabelText,
 			&i.TotalQuantity,
 			&i.UncountedLots,
 			&i.ApproxLots,
@@ -1632,8 +1641,8 @@ UPDATE items SET
     name = ?, kind = ?, category_id = ?, description = ?, manufacturer = ?, mpn = ?,
     supplier_url = ?, datasheet_url = ?, unit = ?, min_stock = ?, hazard_class = ?,
     storage_notes = ?, owner_project_id = ?, owner_department_id = ?, package = ?,
-    version = version + 1, updated_at = CURRENT_TIMESTAMP
-WHERE id = ? RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version
+    label_text = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
+WHERE id = ? RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text
 `
 
 type UpdateItemParams struct {
@@ -1652,6 +1661,7 @@ type UpdateItemParams struct {
 	OwnerProjectID    *int64   `json:"owner_project_id"`
 	OwnerDepartmentID *int64   `json:"owner_department_id"`
 	Package           string   `json:"package"`
+	LabelText         string   `json:"label_text"`
 	ID                int64    `json:"id"`
 }
 
@@ -1672,6 +1682,7 @@ func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) (Item, e
 		arg.OwnerProjectID,
 		arg.OwnerDepartmentID,
 		arg.Package,
+		arg.LabelText,
 		arg.ID,
 	)
 	var i Item
@@ -1696,6 +1707,7 @@ func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) (Item, e
 		&i.UpdatedAt,
 		&i.Package,
 		&i.Version,
+		&i.LabelText,
 	)
 	return i, err
 }

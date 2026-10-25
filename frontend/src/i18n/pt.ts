@@ -185,7 +185,7 @@ export const pt: Dict = {
     datasheetLink: "Link da datasheet",
     itemLabel: "Etiqueta do artigo",
     labelHintUnits: "Normalmente etiquetam-se as unidades; esta abre a página do artigo.",
-    labelHintStock: "Cola-a em cada saco deste artigo; ao lê-la abre-se a página do artigo.",
+    labelHintStock: "Põe-na na gaveta ou no saco: lê-la abre esta página.",
   },
 
   form: {
@@ -197,6 +197,14 @@ export const pt: Dict = {
       hazmat: "Contado como peças, com notas de perigo e armazenamento.",
       flight_hw: "Hardware do foguete, registado unidade a unidade.",
     },
+    fromBag: (mpn: string) =>
+      `Preenchido a partir da etiqueta do saco de ${mpn}. Dá-lhe um nome claro (o que é, o valor), confirma o tipo e a categoria, e escolhe onde fica.`,
+    lookUp: "Preencher a partir da Mouser",
+    lookingUp: "A procurar na Mouser…",
+    lookedUp:
+      "Preenchido a partir da Mouser: nome, categoria, encapsulamento, datasheet, página do produto, foto, quando a Mouser os tem. Confirma.",
+    lookupNotFound: "A Mouser não conhece esta referência.",
+    lookupHint: "Escreve a referência para preencher o resto a partir da Mouser.",
     basics: "Básico",
     basicsHint: "O que é e a quem pertence.",
     namePh: "ex.: Breakout do sensor de pressão BMP390",
@@ -210,6 +218,9 @@ export const pt: Dict = {
     mpn: "Referência do fabricante (MPN)",
     packageFootprint: "Encapsulamento / footprint",
     packagePh: "ex.: 0603, SOT-23, TO-220",
+    labelText: "Texto da etiqueta",
+    labelTextPh: "Texto curto para as etiquetas",
+    labelTextHint: "Impresso nas etiquetas em vez do nome, ex.: “Capacitors 1uF 0402”. Vazio imprime o nome.",
     stock: "Stock",
     stockHint: "Como se conta e quando avisar.",
     warnBelow: "Avisar abaixo de",
@@ -340,6 +351,9 @@ export const pt: Dict = {
     editSubtitle: "Movê-lo move também tudo o que está dentro.",
     descriptionPh: "ex.: Armário cinzento junto à janela",
     deletePlace: "Apagar local",
+    notEmpty: (places: number, things: number) =>
+      `Esvazia-o primeiro: ainda tem ${[places && `${places} ${places === 1 ? "local" : "locais"}`, things && `${things} ${things === 1 ? "coisa" : "coisas"}`].filter(Boolean).join(" e ")}.`,
+    deleted: (n: string) => `${n} apagado`,
   },
 
   loans: {
@@ -399,7 +413,7 @@ export const pt: Dict = {
     recent: "Impressões recentes",
     noneYet: "Ainda não se imprimiram etiquetas",
     noneHint:
-      "As etiquetas imprimem automaticamente quando crias locais, adicionas stock e registas unidades.",
+      "As etiquetas imprimem quando crias um local, ou quando marcas a opção de imprimir ao adicionar stock ou unidades. Ou imprime-as a partir de qualquer página.",
     printAgain: "Imprimir outra vez",
     tryAgain: "Tentar outra vez",
     reprint: "Reimprimir",
@@ -457,6 +471,7 @@ export const pt: Dict = {
       ["owner", "Vazio (equipa), INVICTUS, ou ICARUS/Telemetry."],
       ["status", "Para ferramentas: available ou broken."],
       ["reserved, reserved_note", "Um número ou “all”, e para que é."],
+      ["label", "Texto curto para as etiquetas, ex.: 1uF 0402."],
       [
         "unit, min_stock, lot, expires_on, serial, description, datasheet_url, supplier_url",
         "Extras opcionais.",
@@ -559,7 +574,7 @@ export const pt: Dict = {
     expiry: "Data de validade",
     lot: "Lote",
     printUnits: "Imprimir uma etiqueta por unidade",
-    printStock: "Imprimir a etiqueta do artigo para este saco",
+    printStock: "Imprimir a etiqueta do artigo",
     addedPrinted: "Adicionado — etiqueta enviada para a impressora",
     added: "Adicionado",
   },
