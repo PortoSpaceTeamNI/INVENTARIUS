@@ -78,7 +78,9 @@ function SignedIn() {
   const loc = useLocation();
   // Scroll to the top when moving between pages.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs on navigation
-  useEffect(() => window.scrollTo(0, 0), [loc.pathname]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [loc.pathname]);
 
   if (me.isPending)
     return (
