@@ -1,4 +1,5 @@
 import { BarcodeDetector, prepareZXingModule } from "barcode-detector/ponyfill";
+import { Camera } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
 import { useT } from "../i18n";
@@ -13,10 +14,16 @@ prepareZXingModule({
 
 const FORMATS = ["data_matrix", "qr_code", "code_128"] as const;
 
-/** Live camera view that calls onCode with each decoded label. */
+/**
+ * Live camera view that calls onCode with each decoded label. Where the
+ * browser gives no live camera (plain http, permission denied), it offers
+ * taking a photo instead: the file input opens the phone's camera app on any
+ * page, and the label is read from the picture.
+ */
 export function Scanner({ onCode, paused }: { onCode: (text: string) => void; paused?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<"noCamera" | "denied" | "failed" | null>(null);
+  const [photo, setPhoto] = useState<"reading" | "notFound" | null>(null);
   const t = useT();
   const [torch, setTorch] = useState<MediaStreamTrack | null>(null);
   const [torchOn, setTorchOn] = useState(false);
@@ -95,10 +102,48 @@ export function Scanner({ onCode, paused }: { onCode: (text: string) => void; pa
     setTorchOn(on);
   }
 
+  async function readPhoto(file: File) {
+    setPhoto("reading");
+    try {
+      const found = await new BarcodeDetector({ formats: [...FORMATS] }).detect(file);
+      const text = found[0]?.rawValue;
+      if (text) {
+        setPhoto(null);
+        onCodeRef.current(text);
+        return;
+      }
+    } catch {
+      // not an image the decoder can read
+    }
+    setPhoto("notFound");
+  }
+
   if (error)
     return (
-      <div className="alert alert-danger" role="alert">
-        {t.scanner[error]}
+      <div className="scanner-photo">
+        <p className="small muted">{t.scanner[error]}</p>
+        <label className={`btn btn-primary btn-lg btn-block ${photo === "reading" ? "disabled" : ""}`}>
+          <Camera size={20} /> {photo === "reading" ? t.scanner.reading : t.scanner.takePhoto}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            disabled={photo === "reading"}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = ""; // the same photo again still fires onChange
+              if (f) readPhoto(f);
+            }}
+          />
+        </label>
+        {photo === "notFound" ? (
+          <div className="alert alert-warn" role="alert">
+            {t.scanner.notFound}
+          </div>
+        ) : (
+          <p className="small muted">{t.scanner.photoHint}</p>
+        )}
       </div>
     );
   return (

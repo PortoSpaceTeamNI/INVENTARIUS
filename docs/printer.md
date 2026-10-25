@@ -23,12 +23,15 @@ Every label code is a letter plus a number: `L` location, `I` item, `S` stock, `
 
 | Type | Length on 12 mm* | On 24 mm* | Notes |
 |---|---|---|---|
-| **Data Matrix** (default) | ≈ 8 mm | ≈ 12 mm | Smallest. Scan with the app's Scan button. |
-| QR | ≈ 11 mm | ≈ 15 mm | Encodes `https://inv.portospaceteam.pt/A107`, so any phone camera opens it. |
-| Code128 barcode | ≈ 26 mm | ≈ 26 mm | 1D barcode; long, but good for shelves. |
+| **Data Matrix** (default) | ≈ 26 mm | ≈ 47 mm | Scan with the app's Scan button. |
+| QR | ≈ 25 mm | ≈ 45 mm | Encodes `https://inv.portospaceteam.pt/A107`, so any phone camera opens it. |
+| Code128 barcode | ≈ 26 mm | ≈ 26 mm | 1D barcode, with the code under the bars. |
 
 \* For a code like `A107`, including the 2 mm feed margin the printer adds at each end (the
-minimum it allows). A caption (e.g. the location name) makes the label longer.
+minimum it allows). The symbol fills the height of the tape and the code is printed next to
+it in large text (about 5.5 mm tall on 12 mm tape). With a caption (e.g. the location name),
+the code and the caption share that space, the caption on one line however long it is: each
+character adds about 2 mm of tape on 12 mm (4 mm on 24 mm).
 
 Labels are laid out for whatever tape is loaded when they print: **12 mm** or **24 mm**. On
 24 mm the code and text are twice as big, so they read from further away (e.g. on big boxes
@@ -50,7 +53,7 @@ The protocol code is tested against the spec, but it has not yet run on our prin
 first use:
 
 - [ ] Print one Data Matrix label and one QR label from any location page.
-- [ ] Measure them: about 8 mm and 11 mm long (plus the lead-in on the first label).
+- [ ] Measure them: about 26 mm and 25 mm long (plus the lead-in on the first label).
 - [ ] Scan both with the app and a QR with the normal phone camera.
 - [ ] If the text is upside down or mirrored relative to how you'll stick it, set
       `INVENTARIUS_PRINT_FLIP=true`.

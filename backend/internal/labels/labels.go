@@ -12,6 +12,7 @@ import (
 	"image/color"
 	"image/draw"
 	"strings"
+	"unicode"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
@@ -20,12 +21,15 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 type Symbology string
 
 const (
-	// DataMatrix encodes only the code; smallest label, scanned in the app.
+	// DataMatrix encodes only the code; scanned in the app.
 	DataMatrix Symbology = "datamatrix"
 	// QR encodes the full URL, so any phone camera opens the page.
 	QR Symbology = "qr"
@@ -70,6 +74,9 @@ const (
 	// MarginDots is the feed margin added by the printer on each side.
 	MarginDots = 14
 
+	// Per Scale: blank dots kept at both edges of the band (the symbol's
+	// quiet zone, with the unprinted tape edge), and between text blocks.
+	pad = 4
 	gap = 3
 )
 
@@ -83,41 +90,69 @@ type Spec struct {
 	URL       string    // payload for QR codes; defaults to the code
 }
 
+// A line of text, drawn k times the font's size.
+type line struct {
+	s string
+	k int
+}
+
+func lineH(k int) int { return face.Height * k }
+
 // Render draws the label for tape t. The result is t.BandDots high.
+//
+// The symbol fills the height of the tape. Next to it goes the code in big
+// text (3x the font on 12 mm), or the code and the caption (2x each). The
+// caption goes on one line, however long: the label just gets longer.
+// Barcodes are wide, so their code goes under the bars instead.
 func Render(s Spec, t Tape) (*image.Gray, error) {
-	sym, err := symbol(s, t)
+	k, band := t.Scale, t.BandDots
+	inner := band - 2*pad*k
+	gap := gap * k
+	oneD := s.Symbology == Code128
+	codeK := 2 * k // code text under barcodes, and next to a caption
+
+	var lines []line
+	if !oneD {
+		if s.Caption == "" {
+			lines = append(lines, line{s.Code, 3 * k})
+		} else {
+			lines = append(lines, line{s.Code, codeK})
+		}
+	}
+	if s.Caption != "" {
+		room := inner
+		if len(lines) > 0 {
+			room -= lineH(lines[0].k) + gap
+		}
+		if room >= lineH(2*k) {
+			lines = append(lines, line{plain(strings.Join(strings.Fields(s.Caption), " ")), 2 * k})
+		}
+	}
+
+	symH := inner
+	if oneD {
+		symH -= gap + lineH(codeK)
+	}
+	sym, err := symbol(s, t, symH)
 	if err != nil {
 		return nil, err
 	}
-	k, band := t.Scale, t.BandDots
-	codeW := textWidth(s.Code, k)
-	lineH := face.Height * k
-	gap := gap * k
 
-	// Code text goes under the symbol if it fits, otherwise to its right.
-	below := sym.Bounds().Dy()+gap+lineH <= band
-	var captionLines []string
-	if s.Caption != "" {
-		captionLines = wrap(s.Caption, 18, band/lineH-boolInt(!below))
+	// Left column: the symbol (and a barcode's code text).
+	colW, colH := sym.Bounds().Dx(), sym.Bounds().Dy()
+	if oneD {
+		colW = max(colW, textWidth(s.Code, codeK))
+		colH += gap + lineH(codeK)
 	}
-
-	colW := sym.Bounds().Dx()
-	if below {
-		colW = max(colW, codeW)
-	}
-	w := colW
-	var textX int
-	var textLines []string
-	if !below {
-		textLines = append(textLines, s.Code)
-	}
-	textLines = append(textLines, captionLines...)
-	if len(textLines) > 0 {
+	// Right column: the text lines.
+	w, textX, textH := colW, 0, 0
+	if len(lines) > 0 {
 		// Wide enough to act as the symbol's quiet zone.
 		textX = colW + 12*k
 		tw := 0
-		for _, l := range textLines {
-			tw = max(tw, textWidth(l, k))
+		for i, l := range lines {
+			tw = max(tw, textWidth(l.s, l.k))
+			textH += lineH(l.k) + sep(i, oneD, gap)
 		}
 		w = textX + tw
 	}
@@ -125,40 +160,41 @@ func Render(s Spec, t Tape) (*image.Gray, error) {
 	img := image.NewGray(image.Rect(0, 0, w, band))
 	draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
 
-	symH := sym.Bounds().Dy()
-	blockH := symH
-	if below {
-		blockH += gap + lineH
-	}
-	top := (band - blockH) / 2
+	top := (band - colH) / 2
 	symX := (colW - sym.Bounds().Dx()) / 2
 	draw.Draw(img, sym.Bounds().Add(image.Pt(symX, top)), sym, image.Point{}, draw.Src)
-	if below {
-		drawText(img, (colW-codeW)/2, top+symH+gap, s.Code, k)
+	if oneD {
+		drawText(img, (colW-textWidth(s.Code, codeK))/2, top+sym.Bounds().Dy()+gap, s.Code, codeK)
 	}
-	if len(textLines) > 0 {
-		ty := (band - len(textLines)*lineH) / 2
-		for i, l := range textLines {
-			drawText(img, textX, ty+i*lineH, l, k)
-		}
+	y := (band - textH) / 2
+	for i, l := range lines {
+		y += sep(i, oneD, gap)
+		drawText(img, textX, y, l.s, l.k)
+		y += lineH(l.k)
 	}
 	return img, nil
 }
 
-// symbol encodes and scales the code; quiet zones come from the tape edge
-// and the feed margins.
-func symbol(s Spec, t Tape) (image.Image, error) {
+// sep is the space above text line i: a gap between the code and the caption.
+func sep(i int, oneD bool, gap int) int {
+	if i == 1 && !oneD {
+		return gap
+	}
+	return 0
+}
+
+// symbol encodes the code and scales it to at most h dots high; quiet zones
+// come from the band padding, the tape edge and the feed margins.
+func symbol(s Spec, t Tape, h int) (image.Image, error) {
 	var (
-		bc    barcode.Barcode
-		err   error
-		scale int
-		h     int // 1D bar height
+		bc       barcode.Barcode
+		err      error
+		maxScale int
 	)
-	band := t.BandDots
 	switch s.Symbology {
 	case DataMatrix:
 		bc, err = datamatrix.Encode(s.Code)
-		scale = 3 * t.Scale
+		maxScale = 6 * t.Scale
 	case QR:
 		payload := s.URL
 		if payload == "" {
@@ -166,12 +202,9 @@ func symbol(s Spec, t Tape) (image.Image, error) {
 		}
 		// Upper case keeps the QR in alphanumeric mode: a smaller symbol.
 		bc, err = qr.Encode(strings.ToUpper(payload), qr.L, qr.Auto)
-		scale = 2 * t.Scale
+		maxScale = 4 * t.Scale
 	case Code128:
 		bc, err = code128.Encode(s.Code)
-		// Taller bars on wider tape, but the same bar width: wider bars
-		// would only make the label longer.
-		scale, h = 2, band-(gap+face.Height)*t.Scale
 	default:
 		return nil, fmt.Errorf("unknown symbology %q", s.Symbology)
 	}
@@ -179,24 +212,18 @@ func symbol(s Spec, t Tape) (image.Image, error) {
 		return nil, fmt.Errorf("encode %s: %w", s.Symbology, err)
 	}
 	b := bc.Bounds()
-	if h == 0 {
-		// Keep room for the code text under the symbol if possible; text
-		// beside it makes the label much longer.
-		if fit := (band - (gap+face.Height)*t.Scale) / b.Dy(); fit >= 1 {
-			scale = min(scale, fit)
-		}
-		h = b.Dy() * scale
-	}
-	if h > band {
-		// Fall back to the largest scale that still fits.
-		scale = band / b.Dy()
+	is1D := s.Symbology == Code128
+	// Bars keep the same width on any tape: wider bars would only make the
+	// label longer.
+	scale := 2
+	if !is1D {
+		scale = min(maxScale, h/b.Dy())
 		if scale < 1 {
 			return nil, fmt.Errorf("%s symbol for %q is too big for the tape", s.Symbology, s.Code)
 		}
 		h = b.Dy() * scale
 	}
 	out := image.NewGray(image.Rect(0, 0, b.Dx()*scale, h))
-	is1D := s.Symbology == Code128
 	for y := 0; y < h; y++ {
 		sy := b.Min.Y + y/scale
 		if is1D {
@@ -266,47 +293,33 @@ func drawText(img *image.Gray, x, y int, s string, k int) {
 	}
 }
 
-// wrap breaks s into at most maxLines lines of up to width characters,
-// ellipsizing the last line if needed.
-func wrap(s string, width, maxLines int) []string {
-	if maxLines <= 0 {
-		return nil
+// The label font is ASCII only: accents are dropped ("Eletrónica" →
+// "Eletronica") and a few symbols spelled out; anything else becomes "?".
+var (
+	stripMarks = transform.Chain(norm.NFKD, runes.Remove(runes.In(unicode.Mn)))
+	symbols    = map[rune]string{
+		'Ω': "Ohm", 'µ': "u", 'μ': "u", 'ß': "ss", 'Ø': "O", 'ø': "o",
+		'Æ': "AE", 'æ': "ae", 'Œ': "OE", 'œ': "oe", 'Ł': "L", 'ł': "l",
+		'°': "o", '±': "+/-", '×': "x", '÷': "/", '⁄': "/", '€': "EUR",
+		'–': "-", '—': "-", '‘': "'", '’': "'", '“': "\"", '”': "\"", '«': "\"", '»': "\"",
+		'…': "...", '•': "-", '·': "-",
 	}
-	var lines []string
-	var cur string
-	for _, w := range strings.Fields(s) {
-		for len(w) > width {
-			if cur != "" {
-				lines, cur = append(lines, cur), ""
-			}
-			lines, w = append(lines, w[:width]), w[width:]
-		}
-		switch {
-		case cur == "":
-			cur = w
-		case len(cur)+1+len(w) <= width:
-			cur += " " + w
-		default:
-			lines, cur = append(lines, cur), w
-		}
-	}
-	if cur != "" {
-		lines = append(lines, cur)
-	}
-	if len(lines) > maxLines {
-		lines = lines[:maxLines]
-		last := lines[maxLines-1]
-		if len(last) > width-3 {
-			last = last[:width-3]
-		}
-		lines[maxLines-1] = last + "..." // the bitmap font is ASCII only
-	}
-	return lines
-}
+)
 
-func boolInt(b bool) int {
-	if b {
-		return 1
+func plain(s string) string {
+	if folded, _, err := transform.String(stripMarks, s); err == nil {
+		s = folded
 	}
-	return 0
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r < 0x80:
+			b.WriteRune(r)
+		case symbols[r] != "":
+			b.WriteString(symbols[r])
+		default:
+			b.WriteByte('?')
+		}
+	}
+	return b.String()
 }

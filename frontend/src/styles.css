@@ -2454,3 +2454,22 @@ dialog.sheet::backdrop {
 .sidebar-bottom .sidebar-foot {
   align-self: stretch;
 }
+
+.scanner-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.scanner-photo label.btn {
+  cursor: pointer;
+}
+
+.scanner-photo label.btn.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}

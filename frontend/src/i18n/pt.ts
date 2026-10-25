@@ -370,9 +370,15 @@ export const pt: Dict = {
   },
 
   scanner: {
-    noCamera: "Este browser não pode usar a câmara aqui. A página tem de ser aberta por https.",
-    denied: "A permissão da câmara foi recusada. Permite-a nas definições do browser.",
-    failed: "Não foi possível abrir a câmara.",
+    noCamera: "A leitura em direto só funciona em páginas https, por isso tira uma foto à etiqueta.",
+    denied:
+      "A permissão da câmara foi recusada (podes permiti-la nas definições do browser). Tira uma foto à etiqueta.",
+    failed: "Não foi possível abrir a câmara em direto. Tira uma foto à etiqueta.",
+    takePhoto: "Tirar foto à etiqueta",
+    reading: "A ler a foto…",
+    photoHint: "Aproxima o telemóvel para o código ocupar quase toda a foto.",
+    notFound:
+      "Não foi encontrado nenhum código na foto. Tenta outra vez mais perto, com o código nítido e ao centro.",
     hint: "Data Matrix, QR ou código de barras",
     lightOn: "Ligar luz",
     lightOff: "Desligar luz",
@@ -426,7 +432,7 @@ export const pt: Dict = {
 
   label: {
     help: {
-      datamatrix: "O mais pequeno. Lê-se com a app.",
+      datamatrix: "Lê-se com a app.",
       qr: "Abre com a câmara de qualquer telemóvel.",
       code128: "Código de barras. Comprido, para prateleiras.",
     },

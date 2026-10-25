@@ -364,9 +364,14 @@ export const en = {
   },
 
   scanner: {
-    noCamera: "This browser cannot use the camera here. The page must be opened over https.",
-    denied: "Camera permission was denied. Allow it in the browser settings.",
-    failed: "Could not open the camera.",
+    noCamera: "Live scanning only works on https pages, so take a photo of the label instead.",
+    denied:
+      "Camera permission was denied (you can allow it in the browser settings). Take a photo of the label instead.",
+    failed: "Could not open the live camera. Take a photo of the label instead.",
+    takePhoto: "Take a photo of the label",
+    reading: "Reading the photo…",
+    photoHint: "Hold the phone close so the code fills most of the picture.",
+    notFound: "No code found in that photo. Try again closer, with the code sharp and in the middle.",
     hint: "Data Matrix, QR or barcode",
     lightOn: "Light on",
     lightOff: "Light off",
@@ -419,7 +424,7 @@ export const en = {
 
   label: {
     help: {
-      datamatrix: "Smallest. Scan it with the app.",
+      datamatrix: "Scan it with the app.",
       qr: "Any phone camera opens it.",
       code128: "Barcode. Long, for shelves.",
     },

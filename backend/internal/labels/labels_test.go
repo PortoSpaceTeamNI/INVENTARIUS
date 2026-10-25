@@ -56,19 +56,18 @@ func TestRenderDecodes(t *testing.T) {
 		spec     Spec
 		want     string
 		maxLenMM float64
-		aimW     int // decode only the first aimW dots, like a camera aimed at the code
 	}{
-		{Tape12, Spec{Code: "A107", Symbology: DataMatrix}, "A107", 9, 0},
-		{Tape12, Spec{Code: "L3", Symbology: DataMatrix}, "L3", 9, 0},
-		{Tape12, Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 12, 0},
-		{Tape12, Spec{Code: "A107", Symbology: QR, URL: qrURL}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 12, 0},
-		{Tape12, Spec{Code: "A107", Symbology: Code128}, "A107", 27, 0},
-		{Tape12, Spec{Code: "L42", Symbology: DataMatrix, Caption: caption}, "L42", 40, 40},
-		{Tape24, Spec{Code: "A107", Symbology: DataMatrix}, "A107", 15, 0},
-		{Tape24, Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 18, 0},
-		{Tape24, Spec{Code: "A107", Symbology: QR, URL: qrURL}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 21, 0},
-		{Tape24, Spec{Code: "A107", Symbology: Code128}, "A107", 27, 0},
-		{Tape24, Spec{Code: "L42", Symbology: DataMatrix, Caption: caption}, "L42", 75, 80},
+		{Tape12, Spec{Code: "A107", Symbology: DataMatrix}, "A107", 27},
+		{Tape12, Spec{Code: "L3", Symbology: DataMatrix}, "L3", 21},
+		{Tape12, Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 36},
+		{Tape12, Spec{Code: "A107", Symbology: QR, URL: qrURL}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 26},
+		{Tape12, Spec{Code: "A107", Symbology: Code128}, "A107", 27},
+		{Tape12, Spec{Code: "L42", Symbology: DataMatrix, Caption: caption}, "L42", 65},
+		{Tape24, Spec{Code: "A107", Symbology: DataMatrix}, "A107", 48},
+		{Tape24, Spec{Code: "S123456", Symbology: DataMatrix}, "S123456", 65},
+		{Tape24, Spec{Code: "A107", Symbology: QR, URL: qrURL}, "HTTPS://INV.PORTOSPACETEAM.PT/A107", 46},
+		{Tape24, Spec{Code: "A107", Symbology: Code128}, "A107", 27},
+		{Tape24, Spec{Code: "L42", Symbology: DataMatrix, Caption: caption}, "L42", 123},
 	}
 	dir := os.Getenv("LABELS_OUT") // set to a directory to look at the PNGs
 	for _, tc := range tests {
@@ -84,9 +83,12 @@ func TestRenderDecodes(t *testing.T) {
 			if dir != "" {
 				writePNG(t, filepath.Join(dir, name+".png"), Preview(img, tc.tape))
 			}
+			// The code text sits next to 2D symbols. Decode only the symbol, like a
+			// camera aimed at it: gozxing's Data Matrix detector starts from the
+			// middle of the image (the app's zxing-cpp reads the whole label).
 			aimed := image.Image(img)
-			if tc.aimW > 0 {
-				aimed = img.SubImage(image.Rect(0, 0, tc.aimW, tc.tape.BandDots))
+			if tc.spec.Symbology != Code128 {
+				aimed = img.SubImage(image.Rect(0, 0, tc.tape.BandDots, tc.tape.BandDots))
 			}
 			if got := decode(t, aimed, tc.tape, tc.spec.Symbology); got != tc.want {
 				t.Fatalf("decoded %q, want %q", got, tc.want)
@@ -99,13 +101,18 @@ func TestRenderDecodes(t *testing.T) {
 	}
 }
 
-func TestWrap(t *testing.T) {
-	got := wrap("Shelf C bin 4 with assorted M3 screws and nuts", 18, 2)
-	if len(got) != 2 || got[0] != "Shelf C bin 4 with" || got[1] != "assorted M3 scr..." {
-		t.Fatalf("wrap = %q", got)
-	}
-	if got := wrap("short", 18, 2); len(got) != 1 || got[0] != "short" {
-		t.Fatalf("wrap = %q", got)
+func TestPlain(t *testing.T) {
+	for in, want := range map[string]string{
+		"Armário das ferramentas elétricas": "Armario das ferramentas eletricas",
+		"Gaveta 4 – Fixação, Ação, Coração": "Gaveta 4 - Fixacao, Acao, Coracao",
+		"Resistência 10k Ω, 100 µF":         "Resistencia 10k Ohm, 100 uF",
+		"Tubo Ø20 × 1 m, 1ª prateleira":     "Tubo O20 x 1 m, 1a prateleira",
+		"220 \u2126 (ohm sign)":             "220 Ohm (ohm sign)",
+		"Núcleo PST 🚀":                      "Nucleo PST ?",
+	} {
+		if got := plain(in); got != want {
+			t.Errorf("plain(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
