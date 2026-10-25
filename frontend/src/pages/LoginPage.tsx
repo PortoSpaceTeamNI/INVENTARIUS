@@ -4,7 +4,7 @@ import { type FormEvent, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, get, type User } from "../api";
 import { BrandMark, ErrorBox } from "../components/ui";
-import { errorMessage } from "../lib";
+import { LangToggle, useT } from "../i18n";
 
 interface Methods {
   google: boolean;
@@ -48,6 +48,7 @@ export function LoginPage() {
   const [error, setError] = useState<unknown>(params.get("error"));
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const t = useT();
 
   async function devLogin(addr: string, e?: FormEvent) {
     e?.preventDefault();
@@ -56,41 +57,44 @@ export function LoginPage() {
       await qc.invalidateQueries();
       navigate(next, { replace: true });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   return (
     <div className="login">
       <div className="card login-card">
-        <div className="brand">
-          <BrandMark />
-          <span>
-            INVENTARIUS
-            <small>Porto Space Team</small>
-          </span>
+        <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap" }}>
+          <div className="brand">
+            <BrandMark />
+            <span>
+              INVENTARIUS
+              <small>Porto Space Team</small>
+            </span>
+          </div>
+          <LangToggle />
         </div>
         <div>
-          <h1 style={{ fontSize: "1.4rem" }}>Sign in</h1>
+          <h1 style={{ fontSize: "1.4rem" }}>{t.login.signIn}</h1>
           <p className="muted small" style={{ marginTop: "0.3rem" }}>
-            What we have, where it is, and who has it.
+            {t.login.tagline}
           </p>
         </div>
         <ErrorBox error={error} />
         {methods.data?.google && (
           <>
             <a className="btn btn-lg btn-block" href={`/auth/google?next=${encodeURIComponent(next)}`}>
-              <GoogleLogo /> Continue with Google
+              <GoogleLogo /> {t.login.google}
             </a>
-            <p className="tiny muted center">Use your @{methods.data.domain} account.</p>
+            <p className="tiny muted center">{t.login.accountHint(methods.data.domain)}</p>
           </>
         )}
         {methods.data?.dev && (
           <>
-            {methods.data.google && <div className="divider">development</div>}
+            {methods.data.google && <div className="divider">{t.login.development}</div>}
             <div className="alert alert-warn" style={{ fontSize: "0.82rem" }}>
               <TriangleAlert size={15} />
-              <span>Development login — no password. Never expose this server publicly.</span>
+              <span>{t.login.devWarning}</span>
             </div>
             {devUsers.data && devUsers.data.length > 0 && (
               <div className="list card" style={{ boxShadow: "none" }}>
@@ -128,10 +132,10 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                aria-label="Email"
+                aria-label={t.login.email}
               />
               <button type="submit" className="btn btn-primary">
-                Sign in
+                {t.login.signIn}
               </button>
             </form>
           </>

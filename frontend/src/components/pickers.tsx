@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useT } from "../i18n";
 import { locationPaths, useLocations, useMeta } from "../lib";
 
 /** Encodes team / project / department as "", "p:<id>", "d:<id>". */
@@ -24,12 +25,13 @@ export function OrgSelect(props: {
   id?: string;
 }) {
   const { data: meta } = useMeta();
+  const t = useT();
   return (
     <select id={props.id} value={props.value} onChange={(e) => props.onChange(e.target.value)}>
       <option value="">{props.noneLabel}</option>
       {meta?.projects.map((p) => (
         <optgroup key={p.id} label={p.name}>
-          <option value={`p:${p.id}`}>{p.name} (whole project)</option>
+          <option value={`p:${p.id}`}>{t.common.wholeProject(p.name)}</option>
           {meta.departments
             .filter((d) => d.project_id === p.id)
             .map((d) => (
@@ -52,6 +54,7 @@ export function LocationSelect(props: {
   required?: boolean;
 }) {
   const { data: locs } = useLocations();
+  const t = useT();
   const sorted = useMemo(() => {
     const paths = locationPaths(locs);
     return [...paths.entries()]
@@ -65,7 +68,7 @@ export function LocationSelect(props: {
       value={props.value ?? ""}
       onChange={(e) => props.onChange(e.target.value ? Number(e.target.value) : null)}
     >
-      <option value="">{props.emptyLabel ?? "Choose a location…"}</option>
+      <option value="">{props.emptyLabel ?? t.common.chooseLocation}</option>
       {sorted.map(([id, path]) => (
         <option key={id} value={id}>
           {path}

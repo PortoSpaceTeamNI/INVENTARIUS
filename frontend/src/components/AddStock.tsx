@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { type Asset, api, type CountState, type Item } from "../api";
-import { errorMessage, isUnitKind } from "../lib";
+import { dict, useT } from "../i18n";
+import { isUnitKind } from "../lib";
 import { CountStatePicker } from "./ActionSheet";
 import { LocationSelect } from "./pickers";
 import { ErrorBox, Sheet, useToast } from "./ui";
@@ -32,12 +33,13 @@ export function wantsAdd(v: AddValues) {
 }
 
 export async function addToItem(item: Item, v: AddValues) {
-  if (!v.location) throw new Error("Choose where it is.");
+  const t = dict().add;
+  if (!v.location) throw new Error(t.chooseWhere);
   const lots = v.countState === "uncounted" && !isUnitKind(item.kind);
   const n = lots ? 0 : Number(v.amount.replace(",", "."));
-  if (!lots && !(n > 0)) throw new Error("Enter an amount greater than zero.");
+  if (!lots && !(n > 0)) throw new Error(t.enterAmount);
   if (isUnitKind(item.kind)) {
-    if (!Number.isInteger(n) || n > 50) throw new Error("Units are counted one by one (up to 50 at a time).");
+    if (!Number.isInteger(n) || n > 50) throw new Error(t.unitsLimit);
     await api<Asset[]>("POST", "/api/assets", {
       item_id: item.id,
       location_id: v.location,
@@ -67,15 +69,16 @@ export function AddFields(props: {
   const { v, units } = props;
   const set = <K extends keyof AddValues>(k: K, val: AddValues[K]) => props.set({ ...v, [k]: val });
   const lots = !units && v.countState === "uncounted";
+  const t = useT();
   return (
     <>
       <label className="field">
-        <span>Where is it?</span>
+        <span>{t.add.where}</span>
         <LocationSelect value={v.location} onChange={(id) => set("location", id)} />
       </label>
       {!units && (
         <div className="field">
-          <span className="field-label">How well do you know the amount?</span>
+          <span className="field-label">{t.add.howWell}</span>
           <CountStatePicker value={v.countState} onChange={(s) => set("countState", s)} />
         </div>
       )}
@@ -83,7 +86,7 @@ export function AddFields(props: {
         {!lots && (
           <label className="field">
             <span>
-              {units ? "How many units" : v.countState === "approx" ? "About how many" : "Quantity"}
+              {units ? t.add.howManyUnits : v.countState === "approx" ? t.add.aboutHowMany : t.add.quantity}
               {!units && props.unit !== "pcs" && ` (${props.unit})`}
             </span>
             <input
@@ -96,30 +99,30 @@ export function AddFields(props: {
         )}
         {units ? (
           <label className="field">
-            <span>Serial number</span>
+            <span>{t.add.serial}</span>
             <input
               value={v.serial}
               onChange={(e) => set("serial", e.target.value)}
               disabled={v.amount !== "" && v.amount !== "1"}
-              placeholder={v.amount !== "" && v.amount !== "1" ? "Only for a single unit" : "Optional"}
+              placeholder={v.amount !== "" && v.amount !== "1" ? t.add.onlySingle : t.common.optional}
             />
           </label>
         ) : (
           <label className="field">
-            <span>Expiry date</span>
+            <span>{t.add.expiry}</span>
             <input type="date" value={v.expires} onChange={(e) => set("expires", e.target.value)} />
           </label>
         )}
       </div>
       {!units && (
         <label className="field">
-          <span>Lot / batch</span>
-          <input value={v.lot} onChange={(e) => set("lot", e.target.value)} placeholder="Optional" />
+          <span>{t.add.lot}</span>
+          <input value={v.lot} onChange={(e) => set("lot", e.target.value)} placeholder={t.common.optional} />
         </label>
       )}
       <label className="check">
         <input type="checkbox" checked={v.print} onChange={(e) => set("print", e.target.checked)} />
-        Print {units ? "a label for each unit" : "the item label for this bag"}
+        {units ? t.add.printUnits : t.add.printStock}
       </label>
     </>
   );
@@ -133,6 +136,7 @@ export function AddSheet(props: { open: boolean; onClose: () => void; item: Item
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -141,10 +145,10 @@ export function AddSheet(props: { open: boolean; onClose: () => void; item: Item
     try {
       await addToItem(props.item, v);
       qc.invalidateQueries();
-      toast(v.print ? "Added — label sent to the printer" : "Added");
+      toast(v.print ? t.add.addedPrinted : t.add.added);
       props.onClose();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     } finally {
       setBusy(false);
     }
@@ -154,14 +158,14 @@ export function AddSheet(props: { open: boolean; onClose: () => void; item: Item
     <Sheet
       open={props.open}
       onClose={props.onClose}
-      title={units ? "Add units" : "Add stock"}
+      title={units ? t.item.addUnits : t.item.addStock}
       subtitle={props.item.name}
     >
       <form onSubmit={submit} className="form">
         <AddFields units={units} unit={props.item.unit} v={v} set={setV} />
         <ErrorBox error={error} />
         <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy}>
-          {busy ? "Saving…" : units ? "Add units" : "Add stock"}
+          {busy ? t.common.saving : units ? t.item.addUnits : t.item.addStock}
         </button>
       </form>
     </Sheet>

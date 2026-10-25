@@ -17,8 +17,9 @@ import { LabelCard } from "../components/LabelCard";
 import { LocationSelect, OrgSelect, ownerValue, parseOwnerValue } from "../components/pickers";
 import { DatasheetButton, ReservationList } from "../components/Reservations";
 import { Card, ErrorBox, History, ItemIcon, Loading, Menu, Page, Sheet, useToast } from "../components/ui";
+import { useT } from "../i18n";
+import { serverText } from "../i18n/server";
 import {
-  errorMessage,
   forLabel,
   kindLabel,
   locationPaths,
@@ -48,6 +49,7 @@ export function AssetPage() {
   const [sheet, setSheet] = useState<"borrow" | "return" | "edit" | "reserve" | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   if (q.isPending) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -61,7 +63,7 @@ export function AssetPage() {
   return (
     <Page
       crumbs={[
-        { label: "Items", to: "/items" },
+        { label: t.nav.items, to: "/items" },
         { label: item.name, to: `/items/${item.id}` },
       ]}
       title={
@@ -69,14 +71,14 @@ export function AssetPage() {
           {item.name}
           <span className={`badge ${statusBadge[asset.status]}`} style={{ fontSize: "0.8rem" }}>
             <span className="dot" />
-            {statusLabel[asset.status]}
+            {statusLabel(asset.status)}
           </span>
         </span>
       }
       subtitle={
         <>
           <span className="mono">A{asset.id}</span>
-          {asset.serial && <> · S/N {asset.serial}</>} · {kindLabel[item.kind]} · {ownerLabel(meta, asset)}
+          {asset.serial && <> · S/N {asset.serial}</>} · {kindLabel(item.kind)} · {ownerLabel(meta, asset)}
         </>
       }
     >
@@ -88,13 +90,12 @@ export function AssetPage() {
                 <div className={`alert ${overdue ? "alert-danger" : "alert-warn"}`}>
                   <UserRound size={16} />
                   <div>
-                    <strong>{mine ? "You have it" : `${open.user_name} has it`}</strong>
-                    {(open.loan.project_id || open.loan.department_id) && (
-                      <> for {forLabel(meta, open.loan.project_id, open.loan.department_id)}</>
-                    )}
+                    <strong>{mine ? t.asset.youHaveIt : t.asset.hasIt(open.user_name)}</strong>
+                    {(open.loan.project_id || open.loan.department_id) &&
+                      t.asset.forX(forLabel(meta, open.loan.project_id, open.loan.department_id))}
                     <div className="small" style={{ opacity: 0.85 }}>
-                      Since {when(open.loan.taken_at)}
-                      {open.loan.due_at && <> · due {when(open.loan.due_at)}</>}
+                      {t.asset.since(when(open.loan.taken_at))}
+                      {open.loan.due_at && <> · {t.asset.due(when(open.loan.due_at))}</>}
                       {open.loan.note && <> · “{open.loan.note}”</>}
                     </div>
                   </div>
@@ -103,24 +104,24 @@ export function AssetPage() {
                 <div className="row" style={{ gap: "0.9rem", flexWrap: "nowrap" }}>
                   <ItemIcon kind={item.kind} photo={item.photo} />
                   <div>
-                    <div className="small muted">Lives in</div>
+                    <div className="small muted">{t.asset.livesIn}</div>
                     <div style={{ fontWeight: 550 }}>
                       {home && location ? (
                         <Link to={`/locations/${location.id}`}>{home}</Link>
                       ) : (
-                        <span className="muted">No home location set</span>
+                        <span className="muted">{t.asset.noHome}</span>
                       )}
                     </div>
                   </div>
                 </div>
               )}
               {reservations.length === 0 && !open && asset.status === "available" && (
-                <div className="small text-ok">Not reserved — free to use.</div>
+                <div className="small text-ok">{t.asset.notReserved}</div>
               )}
               <div className="action-bar">
                 {open ? (
                   <button type="button" className="btn btn-primary btn-lg" onClick={() => setSheet("return")}>
-                    <ArrowDownLeft size={18} /> Return it
+                    <ArrowDownLeft size={18} /> {t.asset.returnIt}
                   </button>
                 ) : (
                   <button
@@ -129,23 +130,23 @@ export function AssetPage() {
                     disabled={asset.status !== "available"}
                     onClick={() => setSheet("borrow")}
                   >
-                    <ArrowUpRight size={18} /> Borrow
+                    <ArrowUpRight size={18} /> {t.asset.borrow}
                   </button>
                 )}
                 {can_edit && (
                   <button type="button" className="btn btn-lg" onClick={() => setSheet("edit")}>
-                    <Pencil size={16} /> Edit
+                    <Pencil size={16} /> {t.common.edit}
                   </button>
                 )}
                 <Menu
-                  label="More actions"
+                  label={t.common.moreActions}
                   up
                   size="lg"
                   trigger={<MoreHorizontal size={18} />}
                   items={[
                     reservations.length === 0 &&
                       asset.status !== "retired" && {
-                        label: "Reserve…",
+                        label: t.stock.reserveMenu,
                         icon: <Bookmark size={15} />,
                         onSelect: () => setSheet("reserve"),
                       },
@@ -153,60 +154,57 @@ export function AssetPage() {
                 />
               </div>
               {asset.status !== "available" && !open && (
-                <div className="small muted">
-                  It can't be borrowed while it is {statusLabel[asset.status].toLowerCase()}.
-                </div>
+                <div className="small muted">{t.asset.cantBorrow(statusLabel(asset.status))}</div>
               )}
             </div>
           </Card>
 
           {reservations.length > 0 && (
-            <Card title="Reserved">
+            <Card title={t.common.reserved}>
               <ReservationList reservations={reservations} />
             </Card>
           )}
 
-          <Card title="History">
+          <Card title={t.common.history}>
             <History rows={movements} />
           </Card>
         </div>
 
         <div className="stack" style={{ gap: "1.25rem" }}>
-          <Card title="Details">
+          <Card title={t.common.details}>
             <div className="card-pad stack">
               <dl className="facts">
-                <dt>Item</dt>
+                <dt>{t.common.item}</dt>
                 <dd>
                   <Link to={`/items/${item.id}`}>{item.name}</Link>
                 </dd>
-                <dt>Unit</dt>
+                <dt>{t.asset.unit}</dt>
                 <dd className="mono">A{asset.id}</dd>
                 {asset.serial && (
                   <>
-                    <dt>Serial</dt>
+                    <dt>{t.asset.serial}</dt>
                     <dd className="mono">{asset.serial}</dd>
                   </>
                 )}
-                <dt>Home</dt>
+                <dt>{t.asset.home}</dt>
                 <dd>{home ?? "—"}</dd>
                 {asset.condition && (
                   <>
-                    <dt>Condition</dt>
+                    <dt>{t.asset.condition}</dt>
                     <dd>{asset.condition}</dd>
                   </>
                 )}
-                <dt>Owner</dt>
+                <dt>{t.common.owner}</dt>
                 <dd>{ownerLabel(meta, asset)}</dd>
-                <dt>Borrowed</dt>
+                <dt>{t.asset.borrowed}</dt>
                 <dd>
-                  <Clock size={13} style={{ verticalAlign: -2 }} /> {loans.length} time
-                  {loans.length === 1 ? "" : "s"}
-                  {loans.length > 0 && ` · last by ${loans[0].user_name}`}
+                  <Clock size={13} style={{ verticalAlign: -2 }} /> {t.asset.times(loans.length)}
+                  {loans.length > 0 && t.asset.lastBy(loans[0].user_name)}
                 </dd>
               </dl>
               {asset.notes && (
                 <p className="small" style={{ color: "var(--text-2)" }}>
-                  {asset.notes}
+                  {serverText(asset.notes)}
                 </p>
               )}
               {item.datasheet_url && (
@@ -216,7 +214,7 @@ export function AssetPage() {
               )}
             </div>
           </Card>
-          <Card title="Label">
+          <Card title={t.common.label}>
             <LabelCard code={`A${asset.id}`} caption={item.name} bare />
           </Card>
         </div>
@@ -226,18 +224,18 @@ export function AssetPage() {
         <ActionSheet
           open
           onClose={() => setSheet(null)}
-          title="Reserve"
+          title={t.stock.reserve}
           subtitle={`${item.name} · A${asset.id}`}
-          submitLabel="Reserve"
+          submitLabel={t.stock.reserve}
           askQuantity={false}
           askPurpose
           askUntil
-          noteLabel="What is it for?"
+          noteLabel={t.stock.whatFor}
           noteRequired
           onSubmit={async (v) => {
             await api("POST", "/api/reservations", { ...v, asset_id: id });
             qc.invalidateQueries();
-            toast("Reserved");
+            toast(t.asset.reserved);
           }}
         />
       )}
@@ -245,16 +243,16 @@ export function AssetPage() {
         <ActionSheet
           open
           onClose={() => setSheet(null)}
-          title="Borrow"
+          title={t.asset.borrow}
           subtitle={`${item.name} · A${asset.id}`}
-          submitLabel="Borrow"
+          submitLabel={t.asset.borrow}
           askQuantity={false}
           askPurpose
           askDue
           onSubmit={async (v) => {
             await api("POST", `/api/assets/${id}/borrow`, v);
             qc.invalidateQueries();
-            toast(`You have ${item.name}`);
+            toast(t.asset.youHave(item.name));
           }}
         />
       )}
@@ -262,15 +260,15 @@ export function AssetPage() {
         <ActionSheet
           open
           onClose={() => setSheet(null)}
-          title="Return"
+          title={t.asset.return}
           subtitle={`${item.name} · A${asset.id}`}
-          submitLabel="Return"
+          submitLabel={t.asset.return}
           askQuantity={false}
           askLocation="optional"
           onSubmit={async (v) => {
             await api("POST", `/api/assets/${id}/return`, { location_id: v.to_location_id, note: v.note });
             qc.invalidateQueries();
-            toast("Returned — thanks!");
+            toast(t.asset.returned);
           }}
         />
       )}
@@ -293,6 +291,7 @@ function EditAssetSheet({ detail, onClose }: { detail: AssetDetail; onClose: () 
   const { data: me } = useMe();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const t = useT();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -311,31 +310,31 @@ function EditAssetSheet({ detail, onClose }: { detail: AssetDetail; onClose: () 
       qc.invalidateQueries();
       onClose();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   async function remove() {
-    if (!confirm(`Delete A${a.id} and its history?`)) return;
+    if (!confirm(t.asset.confirmDelete(`A${a.id}`))) return;
     try {
       await api("DELETE", `/api/assets/${a.id}`);
       qc.invalidateQueries();
       navigate(`/items/${a.item_id}`, { replace: true });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   const onLoan = a.status === "on_loan";
   return (
-    <Sheet open onClose={onClose} title={`Edit unit A${a.id}`} subtitle={detail.item.name}>
+    <Sheet open onClose={onClose} title={t.asset.editUnit(`A${a.id}`)} subtitle={detail.item.name}>
       <form onSubmit={submit} className="form">
         <div className="field">
-          <span className="field-label">Status</span>
+          <span className="field-label">{t.asset.status}</span>
           {onLoan ? (
-            <span className="field-hint">On loan — return it before changing its status.</span>
+            <span className="field-hint">{t.asset.onLoanHint}</span>
           ) : (
-            <div className="segmented" role="radiogroup" aria-label="Status">
+            <div className="segmented" role="radiogroup" aria-label={t.asset.status}>
               {(["available", "broken", "in_repair", "retired"] as AssetStatus[]).map((s) => (
                 <button
                   key={s}
@@ -345,45 +344,45 @@ function EditAssetSheet({ detail, onClose }: { detail: AssetDetail; onClose: () 
                   className={status === s ? "on" : ""}
                   onClick={() => setStatus(s)}
                 >
-                  {statusLabel[s]}
+                  {statusLabel(s)}
                 </button>
               ))}
             </div>
           )}
         </div>
         <label className="field">
-          <span>Home location</span>
-          <LocationSelect value={location} onChange={setLocation} emptyLabel="— none —" />
+          <span>{t.asset.homeLocation}</span>
+          <LocationSelect value={location} onChange={setLocation} emptyLabel={t.asset.none} />
         </label>
         <div className="grid-2">
           <label className="field">
-            <span>Serial number</span>
+            <span>{t.asset.serialNumber}</span>
             <input value={serial} onChange={(e) => setSerial(e.target.value)} />
           </label>
           <label className="field">
-            <span>Condition</span>
+            <span>{t.asset.condition}</span>
             <input
               value={condition}
               onChange={(e) => setCondition(e.target.value)}
-              placeholder="e.g. tip worn"
+              placeholder={t.asset.conditionPh}
             />
           </label>
         </div>
         <label className="field">
-          <span>Owner</span>
-          <OrgSelect value={owner} onChange={setOwner} noneLabel="Team (shared)" />
+          <span>{t.common.owner}</span>
+          <OrgSelect value={owner} onChange={setOwner} noneLabel={t.common.teamShared} />
         </label>
         <label className="field">
-          <span>Notes</span>
+          <span>{t.asset.notes}</span>
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
         <ErrorBox error={error} />
         <button type="submit" className="btn btn-primary btn-lg btn-block">
-          Save
+          {t.common.save}
         </button>
         {me?.role === "admin" && (
           <button type="button" className="btn btn-danger btn-block" onClick={remove}>
-            <Trash2 size={15} /> Delete unit
+            <Trash2 size={15} /> {t.asset.deleteUnit}
           </button>
         )}
       </form>

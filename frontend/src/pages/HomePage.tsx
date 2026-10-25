@@ -15,10 +15,12 @@ import {
 import { Link } from "react-router-dom";
 import { get, type MovementRow, type OpenLoan } from "../api";
 import { Card, Empty, History, ItemIcon, Stat } from "../components/ui";
+import { useT } from "../i18n";
 import { greeting, isLow, itemTitle, itemTotal, qty, useAllItems, useMe, when } from "../lib";
 
 export function HomePage() {
   const { data: me } = useMe();
+  const t = useT();
   const items = useAllItems();
   const loans = useQuery({ queryKey: ["loans", "all"], queryFn: () => get<OpenLoan[]>("/api/loans") });
   const activity = useQuery({
@@ -36,8 +38,8 @@ export function HomePage() {
     <div>
       <div className="welcome">
         <div>
-          <h1>{me ? greeting(me.name) : "Welcome"}</h1>
-          <div className="page-subtitle">Here's what's happening in the room.</div>
+          <h1>{me ? greeting(me.name) : t.home.welcome}</h1>
+          <div className="page-subtitle">{t.home.subtitle}</div>
         </div>
       </div>
 
@@ -45,8 +47,8 @@ export function HomePage() {
         <Link to="/me" className="alert alert-info" style={{ marginBottom: "1rem" }}>
           <Users size={16} />
           <span>
-            <strong>Tell us which departments you're in.</strong> It decides what you can edit and fills in
-            “for” when you take things. <ArrowRight size={13} style={{ verticalAlign: -2 }} />
+            <strong>{t.home.deptsTitle}</strong> {t.home.deptsBody}{" "}
+            <ArrowRight size={13} style={{ verticalAlign: -2 }} />
           </span>
         </Link>
       )}
@@ -57,7 +59,8 @@ export function HomePage() {
             <ScanLine size={18} />
           </span>
           <span>
-            Scan a label<small>Take, return, borrow</small>
+            {t.home.scan}
+            <small>{t.home.scanHint}</small>
           </span>
         </Link>
         <Link to="/items/new">
@@ -65,7 +68,8 @@ export function HomePage() {
             <Plus size={18} />
           </span>
           <span>
-            New item<small>Add parts or tools</small>
+            {t.home.newItem}
+            <small>{t.home.newItemHint}</small>
           </span>
         </Link>
         <Link to="/print">
@@ -73,7 +77,8 @@ export function HomePage() {
             <Printer size={18} />
           </span>
           <span>
-            Labels<small>Print and reprint</small>
+            {t.home.labels}
+            <small>{t.home.labelsHint}</small>
           </span>
         </Link>
         <Link to="/import">
@@ -81,55 +86,56 @@ export function HomePage() {
             <FileUp size={18} />
           </span>
           <span>
-            Import<small>From a spreadsheet</small>
+            {t.home.import}
+            <small>{t.home.importHint}</small>
           </span>
         </Link>
       </div>
 
       <div className="stats" style={{ marginTop: "1.25rem" }}>
         <Stat
-          label="Items"
+          label={t.home.items}
           icon={<Boxes size={14} />}
           value={items.data ? all.length : "–"}
           to="/items"
-          hint="in the catalogue"
+          hint={t.home.itemsHint}
         />
         <Stat
-          label="Running low"
+          label={t.home.low}
           icon={<AlertTriangle size={14} />}
           value={<span className={low.length ? "text-warn" : ""}>{items.data ? low.length : "–"}</span>}
           to="/items?show=low"
-          hint="below their minimum"
+          hint={t.home.lowHint}
         />
         <Stat
-          label="On loan"
+          label={t.home.onLoan}
           icon={<Wrench size={14} />}
           value={loans.data?.length ?? "–"}
           to="/loans"
-          hint={overdue ? <span className="text-danger">{overdue} overdue</span> : "tools borrowed"}
+          hint={overdue ? <span className="text-danger">{t.home.overdue(overdue)}</span> : t.home.onLoanHint}
         />
         <Stat
-          label="Reserved"
+          label={t.home.reserved}
           icon={<Bookmark size={14} />}
           value={items.data ? reserved : "–"}
           to="/items?show=reserved"
-          hint="items set aside"
+          hint={t.home.reservedHint}
         />
       </div>
 
       <div className="home-grid">
-        <Card title={<>Recent activity</>} actions={<HistoryIcon size={16} className="faint" />}>
+        <Card title={t.home.activity} actions={<HistoryIcon size={16} className="faint" />}>
           {activity.data ? (
             <History rows={activity.data} showItem />
           ) : (
-            <div className="card-pad muted">Loading…</div>
+            <div className="card-pad muted">{t.common.loading}</div>
           )}
         </Card>
 
         <div className="stack home-side">
-          <Card title="You have" count={mine.length}>
+          <Card title={t.home.youHave} count={mine.length}>
             {mine.length === 0 ? (
-              <Empty icon={<Wrench size={20} />}>Nothing borrowed right now.</Empty>
+              <Empty icon={<Wrench size={20} />}>{t.home.nothingBorrowed}</Empty>
             ) : (
               <div className="list">
                 {mine.map((l) => (
@@ -139,10 +145,10 @@ export function HomePage() {
                       <div className="row-title">{l.item_name}</div>
                       <div className="row-meta">
                         <span>A{l.loan.asset_id}</span>
-                        <span>since {when(l.loan.taken_at)}</span>
+                        <span>{t.home.since(when(l.loan.taken_at))}</span>
                       </div>
                     </div>
-                    {l.overdue && <span className="badge badge-danger">Overdue</span>}
+                    {l.overdue && <span className="badge badge-danger">{t.common.overdue}</span>}
                   </Link>
                 ))}
               </div>
@@ -150,18 +156,18 @@ export function HomePage() {
           </Card>
 
           <Card
-            title="Running low"
+            title={t.home.low}
             count={low.length}
             actions={
               low.length > 0 && (
                 <Link to="/items?show=low" className="small">
-                  View all
+                  {t.home.viewAll}
                 </Link>
               )
             }
           >
             {low.length === 0 ? (
-              <Empty icon={<AlertTriangle size={20} />}>Nothing is below its minimum.</Empty>
+              <Empty icon={<AlertTriangle size={20} />}>{t.home.nothingLow}</Empty>
             ) : (
               <div className="list">
                 {low.slice(0, 6).map((it) => (
@@ -170,7 +176,7 @@ export function HomePage() {
                     <div className="row-main">
                       <div className="row-title">{itemTitle(it)}</div>
                       <div className="row-meta">
-                        <span>min {qty(it.min_stock ?? 0, it.unit)}</span>
+                        <span>{t.common.min(qty(it.min_stock ?? 0, it.unit))}</span>
                       </div>
                     </div>
                     <div className="row-end">

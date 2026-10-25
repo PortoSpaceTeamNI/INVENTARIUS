@@ -4,17 +4,20 @@ import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, get, type PrinterState, type PrintJob, type Symbology } from "../api";
 import { Card, Empty, ErrorBox, Page, useToast } from "../components/ui";
+import { dict, useT } from "../i18n";
+import { serverText } from "../i18n/server";
 import { errorMessage, useMeta, when } from "../lib";
 
-const statusBadge: Record<PrintJob["status"], [string, string]> = {
-  queued: ["", "Waiting"],
-  printing: ["badge-info", "Printing"],
-  done: ["badge-ok", "Printed"],
-  failed: ["badge-danger", "Failed"],
-  cancelled: ["", "Cancelled"],
+const statusBadge: Record<PrintJob["status"], string> = {
+  queued: "",
+  printing: "badge-info",
+  done: "badge-ok",
+  failed: "badge-danger",
+  cancelled: "",
 };
 
-const symbolName: Record<Symbology, string> = { datamatrix: "Data Matrix", qr: "QR", code128: "Barcode" };
+const symbolName = (s: Symbology) =>
+  s === "datamatrix" ? "Data Matrix" : s === "qr" ? "QR" : dict().print.barcode;
 
 export function PrintPage() {
   const printer = useQuery({
@@ -30,6 +33,7 @@ export function PrintPage() {
   });
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   async function jobOp(j: PrintJob, op: "retry" | "cancel") {
     try {
@@ -41,23 +45,28 @@ export function PrintPage() {
   }
 
   const p = printer.data;
-  const problem = !p ? null : !p.enabled ? "Not set up on the server" : p.error || p.problems.join(", ");
+  const problem = !p
+    ? null
+    : !p.enabled
+      ? t.print.notSetUp
+      : serverText(p.error || "") || p.problems.map(serverText).join(", ");
   const ready = p && !problem;
 
   return (
-    <Page title="Labels" subtitle="Brother PT-E550W · 12 or 24 mm tape">
+    <Page title={t.print.title} subtitle={t.print.subtitle}>
       <div className="layout-2">
         <div className="stack" style={{ gap: "1.25rem" }}>
           <BatchPrint />
-          <Card title="Recent print jobs" count={jobs.data?.length}>
+          <Card title={t.print.recent} count={jobs.data?.length}>
             {jobs.data?.length === 0 ? (
-              <Empty icon={<Tag size={20} />} title="No labels printed yet">
-                Labels print automatically when you create places, add stock and register units.
+              <Empty icon={<Tag size={20} />} title={t.print.noneYet}>
+                {t.print.noneHint}
               </Empty>
             ) : (
               <div className="list">
                 {jobs.data?.map((j) => {
-                  const [cls, text] = statusBadge[j.status];
+                  const cls = statusBadge[j.status];
+                  const text = t.print.job[j.status];
                   return (
                     <div key={j.id} className="list-row">
                       <img
@@ -74,9 +83,9 @@ export function PrintPage() {
                           {j.caption && <span className="muted"> · {j.caption}</span>}
                         </div>
                         <div className="row-meta">
-                          <span>{symbolName[j.symbology]}</span>
+                          <span>{symbolName(j.symbology)}</span>
                           <span>{when(j.created_at)}</span>
-                          {j.error && <span className="text-danger">{j.error}</span>}
+                          {j.error && <span className="text-danger">{serverText(j.error)}</span>}
                         </div>
                       </div>
                       <span className={`badge ${cls}`}>{text}</span>
@@ -85,10 +94,12 @@ export function PrintPage() {
                           type="button"
                           className="btn btn-sm"
                           onClick={() => jobOp(j, "retry")}
-                          title={j.status === "done" ? "Print again" : "Try again"}
+                          title={j.status === "done" ? t.print.printAgain : t.print.tryAgain}
                         >
                           <RotateCcw size={14} />
-                          <span className="only-desktop">{j.status === "done" ? "Reprint" : "Retry"}</span>
+                          <span className="only-desktop">
+                            {j.status === "done" ? t.print.reprint : t.print.retry}
+                          </span>
                         </button>
                       )}
                       {(j.status === "queued" || j.status === "failed") && (
@@ -96,7 +107,7 @@ export function PrintPage() {
                           type="button"
                           className="btn btn-sm btn-ghost icon-btn"
                           onClick={() => jobOp(j, "cancel")}
-                          aria-label="Cancel"
+                          aria-label={t.common.cancel}
                         >
                           <X size={15} />
                         </button>
@@ -111,15 +122,15 @@ export function PrintPage() {
 
         <div className="stack" style={{ gap: "1.25rem" }}>
           <Card
-            title="Printer"
+            title={t.print.printer}
             actions={
               <button
                 type="button"
                 className="btn btn-sm btn-ghost"
                 onClick={() => printer.refetch()}
-                aria-label="Check the printer"
+                aria-label={t.print.checkPrinter}
               >
-                <RefreshCw size={14} /> Check
+                <RefreshCw size={14} /> {t.print.check}
               </button>
             }
           >
@@ -136,28 +147,31 @@ export function PrintPage() {
                   <div className="row small" style={{ gap: "0.45rem" }}>
                     <span className={`status-dot ${!p ? "" : ready ? "ok" : "bad"}`} />
                     <span className={ready ? "text-ok" : problem ? "text-danger" : "muted"}>
-                      {!p ? "Checking…" : ready ? (p.busy ? "Printing…" : "Ready") : problem}
+                      {!p
+                        ? t.print.checking
+                        : ready
+                          ? p.busy
+                            ? t.print.printingNow
+                            : t.print.ready
+                          : problem}
                     </span>
                   </div>
                 </div>
               </div>
               {p?.enabled && (
                 <dl className="facts">
-                  <dt>Tape</dt>
+                  <dt>{t.print.tape}</dt>
                   <dd>
                     {p.tape_mm ? `${p.tape_mm} mm` : "—"}
                     {p.tape_mm !== 0 && p.tape_mm !== 12 && p.tape_mm !== 24 && (
-                      <span className="text-danger"> · labels need 12 or 24 mm</span>
+                      <span className="text-danger">{t.print.tapeNeed}</span>
                     )}
                   </dd>
-                  <dt>Checked</dt>
+                  <dt>{t.print.checked}</dt>
                   <dd>{when(p.checked_at)}</dd>
                 </dl>
               )}
-              <p className="small muted">
-                Labels created within a few seconds of each other print together as one strip, so less tape is
-                wasted.
-              </p>
+              <p className="small muted">{t.print.batchNote}</p>
             </div>
           </Card>
         </div>
@@ -174,6 +188,7 @@ function BatchPrint() {
   const [error, setError] = useState<unknown>(null);
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -183,43 +198,45 @@ function BatchPrint() {
       await api("POST", "/api/print", {
         labels: codes.map((code) => ({ code, symbology: sym || meta?.symbology })),
       });
-      toast(`${codes.length} ${codes.length === 1 ? "label" : "labels"} sent to the printer`);
+      toast(t.print.sent(codes.length));
       setText("");
       qc.invalidateQueries({ queryKey: ["print-jobs"] });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   return (
-    <Card title="Print several labels">
+    <Card title={t.print.several}>
       <form className="card-pad form" onSubmit={submit}>
         <label className="field">
-          <span>Codes</span>
+          <span>{t.print.codes}</span>
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="e.g. L4-L12, A7, A9"
+            placeholder={t.print.codesPh}
             autoCapitalize="characters"
             className="mono"
           />
           <span className="field-hint">
-            Ranges work too: <code>L1-L66</code> prints every drawer label at once.
+            {t.print.rangesPre}
+            <code>L1-L66</code>
+            {t.print.rangesPost}
           </span>
         </label>
         <div className="row" style={{ flexWrap: "nowrap" }}>
           <select
             value={sym}
             onChange={(e) => setSym(e.target.value as Symbology | "")}
-            aria-label="Code type"
+            aria-label={t.print.codeType}
           >
-            <option value="">Default ({symbolName[meta?.symbology ?? "datamatrix"]})</option>
+            <option value="">{t.print.default(symbolName(meta?.symbology ?? "datamatrix"))}</option>
             <option value="datamatrix">Data Matrix</option>
             <option value="qr">QR</option>
-            <option value="code128">Barcode</option>
+            <option value="code128">{t.print.barcode}</option>
           </select>
           <button type="submit" className="btn btn-primary" disabled={!text.trim()}>
-            <Printer size={15} /> Print
+            <Printer size={15} /> {t.print.print}
           </button>
         </div>
         <ErrorBox error={error} />
@@ -239,15 +256,15 @@ export function expandCodes(text: string): string[] {
       const [, k, a, b] = range;
       const from = Number(a);
       const to = Number(b);
-      if (to < from || to - from > 199) throw new Error(`Range ${part} is backwards or too long.`);
+      if (to < from || to - from > 199) throw new Error(dict().print.errRange(part));
       for (let i = from; i <= to; i++) out.push(`${k}${i}`);
     } else if (/^[LISA][1-9]\d*$/.test(part)) {
       out.push(part);
     } else {
-      throw new Error(`“${raw}” is not a label code.`);
+      throw new Error(dict().print.errCode(raw));
     }
   }
-  if (out.length === 0) throw new Error("Enter at least one code.");
-  if (out.length > 200) throw new Error("At most 200 labels at once.");
+  if (out.length === 0) throw new Error(dict().print.errEmpty);
+  if (out.length > 200) throw new Error(dict().print.errTooMany);
   return out;
 }

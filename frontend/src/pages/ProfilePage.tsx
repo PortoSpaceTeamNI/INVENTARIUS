@@ -1,11 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { FileUp, LogOut, Printer, Users } from "lucide-react";
+import { FileUp, Languages, LogOut, Printer, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Card, Page, useToast } from "../components/ui";
+import { LangToggle, useT } from "../i18n";
 import { errorMessage, useMe, useMeta } from "../lib";
-
-const roleLabel = { member: "Member", dept_lead: "Department lead", admin: "Admin" };
 
 export function ProfilePage() {
   const { data: me } = useMe();
@@ -13,6 +12,7 @@ export function ProfilePage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
+  const t = useT();
   if (!me || !meta) return null;
 
   async function toggle(id: number) {
@@ -55,20 +55,17 @@ export function ProfilePage() {
       }
       actions={
         <>
-          <span className="badge badge-info">{roleLabel[me.role]}</span>
+          <span className="badge badge-info">{t.role[me.role]}</span>
           <button type="button" className="btn" onClick={logout}>
-            <LogOut size={15} /> Sign out
+            <LogOut size={15} /> {t.profile.signOut}
           </button>
         </>
       }
     >
       <div className="layout-2">
-        <Card title="My departments">
+        <Card title={t.profile.myDepts}>
           <div className="card-pad stack">
-            <p className="small muted">
-              You can edit things your departments own, and they're suggested when you take or borrow
-              something.
-            </p>
+            <p className="small muted">{t.profile.deptsHint}</p>
             {meta.projects.map((p) => (
               <div key={p.id} className="stack-sm">
                 <h3>{p.name}</h3>
@@ -91,36 +88,46 @@ export function ProfilePage() {
             ))}
           </div>
         </Card>
-        <Card title="Shortcuts">
-          <div className="list">
-            <Link to="/print" className="list-row">
-              <span className="row-icon kind-tool">
-                <Printer size={16} />
+        <div className="stack" style={{ gap: "1.25rem" }}>
+          <Card title={t.profile.language}>
+            <div className="card-pad row" style={{ justifyContent: "space-between" }}>
+              <span className="row small muted" style={{ gap: "0.5rem" }}>
+                <Languages size={16} /> {t.profile.languageHint}
               </span>
-              <div className="row-main">
-                <div className="row-title">Labels & printer</div>
-              </div>
-            </Link>
-            <Link to="/import" className="list-row">
-              <span className="row-icon kind-flight_hw">
-                <FileUp size={16} />
-              </span>
-              <div className="row-main">
-                <div className="row-title">Import a spreadsheet</div>
-              </div>
-            </Link>
-            {me.role === "admin" && (
-              <Link to="/users" className="list-row">
-                <span className="row-icon kind-consumable">
-                  <Users size={16} />
+              <LangToggle />
+            </div>
+          </Card>
+          <Card title={t.profile.shortcuts}>
+            <div className="list">
+              <Link to="/print" className="list-row">
+                <span className="row-icon kind-tool">
+                  <Printer size={16} />
                 </span>
                 <div className="row-main">
-                  <div className="row-title">People</div>
+                  <div className="row-title">{t.profile.labelsPrinter}</div>
                 </div>
               </Link>
-            )}
-          </div>
-        </Card>
+              <Link to="/import" className="list-row">
+                <span className="row-icon kind-flight_hw">
+                  <FileUp size={16} />
+                </span>
+                <div className="row-main">
+                  <div className="row-title">{t.profile.importSheet}</div>
+                </div>
+              </Link>
+              {me.role === "admin" && (
+                <Link to="/users" className="list-row">
+                  <span className="row-icon kind-consumable">
+                    <Users size={16} />
+                  </span>
+                  <div className="row-main">
+                    <div className="row-title">{t.profile.people}</div>
+                  </div>
+                </Link>
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </Page>
   );

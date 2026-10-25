@@ -16,6 +16,7 @@ import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "rea
 import { ApiError, get, type OpenLoan, type User } from "./api";
 import { SearchPaletteProvider, useOpenSearch } from "./components/SearchPalette";
 import { BrandMark, Loading } from "./components/ui";
+import { LangToggle, useT } from "./i18n";
 import { useMe } from "./lib";
 import { AssetPage } from "./pages/AssetPage";
 import { CodePage } from "./pages/CodePage";
@@ -62,11 +63,12 @@ export function App() {
 }
 
 function NotFound() {
+  const t = useT();
   return (
     <div className="empty">
-      <strong>Page not found</strong>
+      <strong>{t.common.pageNotFound}</strong>
       <Link to="/" className="btn">
-        Go home
+        {t.common.goHome}
       </Link>
     </div>
   );
@@ -76,6 +78,7 @@ function NotFound() {
 function SignedIn() {
   const me = useMe();
   const loc = useLocation();
+  const t = useT();
   // Scroll to the top when moving between pages.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs on navigation
   useEffect(() => {
@@ -95,7 +98,7 @@ function SignedIn() {
     }
     return (
       <div className="content">
-        <div className="alert alert-danger">Cannot reach the server: {me.error.message}</div>
+        <div className="alert alert-danger">{t.common.cannotReach(me.error.message)}</div>
       </div>
     );
   }
@@ -129,21 +132,22 @@ function Avatar({ me }: { me: User }) {
 
 function TopBar({ me }: { me: User }) {
   const openSearch = useOpenSearch();
+  const t = useT();
   return (
     <header className="topbar">
-      <Link to="/" className="brand" aria-label="Home">
+      <Link to="/" className="brand" aria-label={t.nav.home}>
         <BrandMark />
       </Link>
       <button type="button" className="search-trigger" onClick={openSearch}>
         <Search size={16} />
-        <span>Search items, parts, places…</span>
+        <span>{t.nav.searchHint}</span>
         <kbd className="only-desktop">/</kbd>
       </button>
       <span className="spacer only-desktop" />
       <Link to="/scan" className="btn btn-primary only-desktop">
-        <ScanLine size={16} /> Scan
+        <ScanLine size={16} /> {t.nav.scan}
       </Link>
-      <Link to="/me" className="avatar-link" aria-label="Your profile">
+      <Link to="/me" className="avatar-link" aria-label={t.nav.profile}>
         <Avatar me={me} />
       </Link>
     </header>
@@ -153,6 +157,7 @@ function TopBar({ me }: { me: User }) {
 function Sidebar({ me }: { me: User }) {
   const loans = useQuery({ queryKey: ["loans", "all"], queryFn: () => get<OpenLoan[]>("/api/loans") });
   const overdue = loans.data?.filter((l) => l.overdue).length ?? 0;
+  const t = useT();
   return (
     <aside className="sidebar">
       <Link to="/" className="brand">
@@ -164,72 +169,76 @@ function Sidebar({ me }: { me: User }) {
       </Link>
       <nav className="nav">
         <NavLink to="/" end>
-          <Home size={17} /> Home
+          <Home size={17} /> {t.nav.home}
         </NavLink>
         <NavLink to="/items">
-          <Boxes size={17} /> Items
+          <Boxes size={17} /> {t.nav.items}
         </NavLink>
         <NavLink to="/locations">
-          <MapPin size={17} /> Locations
+          <MapPin size={17} /> {t.nav.locations}
         </NavLink>
         <NavLink to="/loans">
-          <Wrench size={17} /> Loans
+          <Wrench size={17} /> {t.nav.loans}
           {overdue > 0 && <span className="nav-count">{overdue}</span>}
         </NavLink>
-        <div className="nav-label">Tools</div>
+        <div className="nav-label">{t.nav.tools}</div>
         <NavLink to="/scan">
-          <ScanLine size={17} /> Scan
+          <ScanLine size={17} /> {t.nav.scan}
         </NavLink>
         <NavLink to="/print">
-          <Printer size={17} /> Labels
+          <Printer size={17} /> {t.nav.labels}
         </NavLink>
         <NavLink to="/import">
-          <FileUp size={17} /> Import
+          <FileUp size={17} /> {t.nav.import}
         </NavLink>
         {me.role === "admin" && (
           <>
-            <div className="nav-label">Admin</div>
+            <div className="nav-label">{t.nav.admin}</div>
             <NavLink to="/users">
-              <Users size={17} /> People
+              <Users size={17} /> {t.nav.people}
             </NavLink>
           </>
         )}
       </nav>
-      <Link to="/me" className="sidebar-foot">
-        <Avatar me={me} />
-        <div>
-          {me.name}
-          <small>{me.email}</small>
-        </div>
-        <Settings size={16} style={{ marginLeft: "auto", opacity: 0.6 }} />
-      </Link>
+      <div className="sidebar-bottom">
+        <LangToggle tone="dark" />
+        <Link to="/me" className="sidebar-foot">
+          <Avatar me={me} />
+          <div>
+            {me.name}
+            <small>{me.email}</small>
+          </div>
+          <Settings size={16} style={{ marginLeft: "auto", opacity: 0.6 }} />
+        </Link>
+      </div>
     </aside>
   );
 }
 
 function TabBar() {
+  const t = useT();
   return (
     <nav className="tabbar">
       <NavLink to="/" end>
         <Home size={21} />
-        Home
+        {t.nav.home}
       </NavLink>
       <NavLink to="/items">
         <Boxes size={21} />
-        Items
+        {t.nav.items}
       </NavLink>
-      <NavLink to="/scan" aria-label="Scan">
+      <NavLink to="/scan" aria-label={t.nav.scan}>
         <span className="scan-bubble">
           <ScanLine size={24} />
         </span>
       </NavLink>
       <NavLink to="/locations">
         <MapPin size={21} />
-        Places
+        {t.nav.places}
       </NavLink>
       <NavLink to="/loans">
         <Wrench size={21} />
-        Loans
+        {t.nav.loans}
       </NavLink>
     </nav>
   );

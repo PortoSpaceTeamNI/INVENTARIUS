@@ -16,6 +16,7 @@ import { ActionSheet, type ActionValues } from "../components/ActionSheet";
 import { LabelCard } from "../components/LabelCard";
 import { DatasheetButton, ReservationList, StockMeter } from "../components/Reservations";
 import { Card, ErrorBox, History, ItemIcon, Loading, Menu, Page, useToast } from "../components/ui";
+import { useT } from "../i18n";
 import {
   code,
   day,
@@ -50,6 +51,7 @@ export function StockPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
+  const t = useT();
 
   if (q.isPending) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -68,20 +70,20 @@ export function StockPage() {
     if (o === "reserve") {
       await api("POST", "/api/reservations", { ...v, stock_id: id });
       qc.invalidateQueries();
-      toast(`Reserved ${qty(v.quantity, unit)}`);
+      toast(t.stock.reservedN(qty(v.quantity, unit)));
       return;
     }
     const res = await api<{ id: number }>("POST", `/api/stock/${id}/${o}`, v);
     qc.invalidateQueries();
-    const n = lots && o !== "adjust" ? "some" : qty(v.quantity, unit);
+    const n = lots && o !== "adjust" ? t.stock.some : qty(v.quantity, unit);
     toast(
       {
-        take: `Took ${n}`,
-        return: `Put back ${n}`,
-        move: "Moved",
+        take: t.stock.tookN(n),
+        return: t.stock.putBackN(n),
+        move: t.stock.moved,
         adjust:
-          v.count_state === "uncounted" ? "Marked as not counted" : `Count set to ${qty(v.quantity, unit)}`,
-        "write-off": `Wrote off ${n}`,
+          v.count_state === "uncounted" ? t.stock.markedUncounted : t.stock.countSet(qty(v.quantity, unit)),
+        "write-off": t.stock.wroteOff(n),
       }[o as Exclude<Op, "reserve">],
     );
     // A partial move can land in another stock row.
@@ -89,7 +91,7 @@ export function StockPage() {
   }
 
   async function remove() {
-    if (!confirm("Remove this empty stock entry?")) return;
+    if (!confirm(t.stock.confirmRemove)) return;
     try {
       await api("DELETE", `/api/stock/${id}`);
       qc.invalidateQueries();
@@ -99,23 +101,23 @@ export function StockPage() {
     }
   }
 
-  const unitWord = unit === "pcs" ? "pieces" : unit;
+  const unitWord = unit === "pcs" ? t.common.pieces : unit;
   return (
     <Page
       crumbs={[
-        { label: "Items", to: "/items" },
+        { label: t.nav.items, to: "/items" },
         { label: item.name, to: `/items/${item.id}` },
       ]}
       title={itemTitle(item)}
       subtitle={
         <>
           {/* The bag is labelled with the item code, so that ends the path; the stock id is secondary. */}
-          in <Link to={`/locations/${location.id}`}>{where}</Link>
+          {t.stock.in} <Link to={`/locations/${location.id}`}>{where}</Link>
           <span className="faint"> › </span>
           <Link to={`/items/${item.id}`} className="mono">
             {code.item(item.id)}
           </Link>
-          <span className="faint small"> (stock {stock.id})</span>
+          <span className="faint small"> ({t.common.stockN(stock.id)})</span>
         </>
       }
     >
@@ -128,13 +130,15 @@ export function StockPage() {
                   <ItemIcon kind={item.kind} photo={item.photo} />
                   <div className={`qty-big ${empty ? "text-danger" : ""}`}>
                     {stockQty(stock)}
-                    <small>{lots ? "not counted" : unitWord}</small>
+                    <small>{lots ? t.stock.notCounted : unitWord}</small>
                   </div>
                 </div>
                 <div className="tags">
-                  {stock.count_state === "approx" && <span className="badge badge-violet">Estimate</span>}
-                  {lots && <span className="badge">Plenty</span>}
-                  {empty && <span className="badge badge-danger">Empty</span>}
+                  {stock.count_state === "approx" && (
+                    <span className="badge badge-violet">{t.stock.estimate}</span>
+                  )}
+                  {lots && <span className="badge">{t.stock.plenty}</span>}
+                  {empty && <span className="badge badge-danger">{t.stock.empty}</span>}
                 </div>
               </div>
               {!lots && stock.quantity > 0 && reserved > 0 && (
@@ -142,11 +146,11 @@ export function StockPage() {
               )}
               {!lots && stock.quantity > 0 && reserved === 0 && (
                 <div className="row small text-ok" style={{ gap: "0.4rem" }}>
-                  <span className="status-dot ok" /> Nothing reserved — all free to use
+                  <span className="status-dot ok" /> {t.stock.allFree}
                 </div>
               )}
               {lots && reserved > 0 && (
-                <div className="small text-warn">{qty(reserved, unit)} reserved from this lot</div>
+                <div className="small text-warn">{t.stock.reservedFromLot(qty(reserved, unit))}</div>
               )}
               <div className="action-bar">
                 <button
@@ -155,40 +159,40 @@ export function StockPage() {
                   onClick={() => setOp("take")}
                   disabled={empty}
                 >
-                  <ArrowUpRight size={18} /> Take
+                  <ArrowUpRight size={18} /> {t.stock.take}
                 </button>
                 <button type="button" className="btn btn-lg" onClick={() => setOp("return")}>
-                  <ArrowDownLeft size={18} /> Put back
+                  <ArrowDownLeft size={18} /> {t.stock.putBack}
                 </button>
                 <button type="button" className="btn btn-lg" onClick={() => setOp("move")} disabled={empty}>
-                  <ArrowRightLeft size={17} /> Move
+                  <ArrowRightLeft size={17} /> {t.stock.move}
                 </button>
                 <Menu
-                  label="More actions"
+                  label={t.common.moreActions}
                   up
                   size="lg"
                   trigger={<MoreHorizontal size={18} />}
                   items={[
                     {
-                      label: "Reserve…",
+                      label: t.stock.reserveMenu,
                       icon: <Bookmark size={15} />,
                       onSelect: () => setOp("reserve"),
                       disabled: free !== undefined && free <= 0,
                     },
                     can_edit && {
-                      label: "Count…",
+                      label: t.stock.countMenu,
                       icon: <ClipboardCheck size={15} />,
                       onSelect: () => setOp("adjust"),
                     },
                     can_edit && {
-                      label: "Write off…",
+                      label: t.stock.writeOffMenu,
                       icon: <XCircle size={15} />,
                       onSelect: () => setOp("write-off"),
                       disabled: empty,
                     },
                     stock.quantity === 0 &&
                       (can_edit || me?.role === "admin") && {
-                        label: "Remove empty entry",
+                        label: t.stock.removeEmpty,
                         icon: <Trash2 size={15} />,
                         onSelect: remove,
                         danger: true,
@@ -201,48 +205,48 @@ export function StockPage() {
           </Card>
 
           {reservations.length > 0 && (
-            <Card title="Reserved" count={reservations.length}>
+            <Card title={t.common.reserved} count={reservations.length}>
               <ReservationList reservations={reservations} unit={unit} />
             </Card>
           )}
 
-          <Card title="History">
+          <Card title={t.common.history}>
             <History rows={movements} />
           </Card>
         </div>
 
         <div className="stack" style={{ gap: "1.25rem" }}>
-          <Card title="Details">
+          <Card title={t.common.details}>
             <div className="card-pad stack">
               <dl className="facts">
-                <dt>Item</dt>
+                <dt>{t.common.item}</dt>
                 <dd>
                   <Link to={`/items/${item.id}`}>{item.name}</Link>
                 </dd>
                 {item.package && (
                   <>
-                    <dt>Package</dt>
+                    <dt>{t.common.package}</dt>
                     <dd className="mono">{item.package}</dd>
                   </>
                 )}
                 {item.mpn && (
                   <>
-                    <dt>Part no.</dt>
+                    <dt>{t.common.partNo}</dt>
                     <dd className="mono">{item.mpn}</dd>
                   </>
                 )}
-                <dt>Place</dt>
+                <dt>{t.stock.place}</dt>
                 <dd>
                   <Link to={`/locations/${location.id}`}>{where}</Link>
                 </dd>
                 {others.length > 0 && (
                   <>
-                    <dt>Also in</dt>
+                    <dt>{t.stock.alsoIn}</dt>
                     <dd className="stack" style={{ gap: "0.25rem" }}>
                       {others.map((s) => (
                         <Link key={s.id} to={`/stock/${s.id}`}>
-                          {paths.get(s.location_id) ?? `Location ${s.location_id}`} › {code.item(item.id)}{" "}
-                          <span className="faint small">(stock {s.id})</span>
+                          {paths.get(s.location_id) ?? t.item.location(s.location_id)} › {code.item(item.id)}{" "}
+                          <span className="faint small">({t.common.stockN(s.id)})</span>
                         </Link>
                       ))}
                     </dd>
@@ -250,17 +254,17 @@ export function StockPage() {
                 )}
                 {stock.lot && (
                   <>
-                    <dt>Lot</dt>
+                    <dt>{t.stock.lot}</dt>
                     <dd>{stock.lot}</dd>
                   </>
                 )}
                 {stock.expires_on && (
                   <>
-                    <dt>Expires</dt>
+                    <dt>{t.stock.expires}</dt>
                     <dd>{day(stock.expires_on)}</dd>
                   </>
                 )}
-                <dt>Owner</dt>
+                <dt>{t.common.owner}</dt>
                 <dd>{ownerLabel(meta, stock)}</dd>
               </dl>
               {item.datasheet_url && (
@@ -270,7 +274,7 @@ export function StockPage() {
               )}
             </div>
           </Card>
-          <Card title="Label">
+          <Card title={t.common.label}>
             <LabelCard code={code.item(item.id)} caption={item.name} bare />
           </Card>
         </div>
@@ -280,9 +284,9 @@ export function StockPage() {
         <ActionSheet
           open
           onClose={() => setOp(null)}
-          title="Take"
+          title={t.stock.take}
           subtitle={`${itemTitle(item)} · ${where}`}
-          submitLabel="Take"
+          submitLabel={t.stock.take}
           unit={unit}
           max={lots ? undefined : stock.quantity}
           free={free}
@@ -295,9 +299,9 @@ export function StockPage() {
         <ActionSheet
           open
           onClose={() => setOp(null)}
-          title="Put back"
+          title={t.stock.putBack}
           subtitle={`${itemTitle(item)} · ${where}`}
-          submitLabel="Put back"
+          submitLabel={t.stock.putBack}
           unit={unit}
           askPurpose
           onSubmit={(v) => run("return", v)}
@@ -307,9 +311,9 @@ export function StockPage() {
         <ActionSheet
           open
           onClose={() => setOp(null)}
-          title={lots ? "Move all of it" : "Move"}
-          subtitle={`${itemTitle(item)} · from ${where}`}
-          submitLabel="Move"
+          title={lots ? t.stock.moveAll : t.stock.move}
+          subtitle={`${itemTitle(item)} · ${t.stock.from(where)}`}
+          submitLabel={t.stock.move}
           unit={unit}
           askQuantity={!lots}
           max={stock.quantity}
@@ -323,9 +327,9 @@ export function StockPage() {
         <ActionSheet
           open
           onClose={() => setOp(null)}
-          title="Count"
-          subtitle="How many are there right now?"
-          submitLabel="Save count"
+          title={t.stock.count}
+          subtitle={t.stock.countSubtitle}
+          submitLabel={t.stock.saveCount}
           unit={unit}
           defaultQuantity={stock.quantity}
           allowZero
@@ -338,12 +342,12 @@ export function StockPage() {
         <ActionSheet
           open
           onClose={() => setOp(null)}
-          title="Write off"
-          subtitle="Broken, expired or lost"
-          submitLabel="Write off"
+          title={t.stock.writeOff}
+          subtitle={t.stock.writeOffSubtitle}
+          submitLabel={t.stock.writeOff}
           unit={unit}
           max={lots ? undefined : stock.quantity}
-          noteLabel="Why?"
+          noteLabel={t.stock.why}
           danger
           onSubmit={(v) => run("write-off", v)}
         />
@@ -352,15 +356,15 @@ export function StockPage() {
         <ActionSheet
           open
           onClose={() => setOp(null)}
-          title="Reserve"
-          subtitle="Set it aside so others know it's meant for something"
-          submitLabel="Reserve"
+          title={t.stock.reserve}
+          subtitle={t.stock.reserveSubtitle}
+          submitLabel={t.stock.reserve}
           unit={unit}
           defaultQuantity={free === undefined ? 1 : Math.min(1, free)}
           free={free}
           askPurpose
           askUntil
-          noteLabel="What is it for?"
+          noteLabel={t.stock.whatFor}
           noteRequired
           onSubmit={(v) => run("reserve", v)}
         />

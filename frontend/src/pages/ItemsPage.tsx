@@ -4,9 +4,11 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { type Category, get, type ItemKind, type ItemSummary } from "../api";
 import { Card, Empty, ErrorBox, ItemIcon, Loading, Page } from "../components/ui";
+import { type Dict, useT } from "../i18n";
 import {
   isLow,
   isUnitKind,
+  itemKinds,
   itemTitle,
   itemTotal,
   kindLabel,
@@ -18,11 +20,11 @@ import {
 
 type Show = "all" | "low" | "reserved" | "uncounted";
 
-const shows: [Show, string][] = [
-  ["all", "All"],
-  ["low", "Running low"],
-  ["reserved", "Reserved"],
-  ["uncounted", "Not counted"],
+const shows = (t: Dict): [Show, string][] => [
+  ["all", t.items.showAll],
+  ["low", t.items.showLow],
+  ["reserved", t.items.showReserved],
+  ["uncounted", t.items.showUncounted],
 ];
 
 export function categoryPaths(cats: Category[] | undefined): Map<number, string> {
@@ -45,6 +47,7 @@ export function ItemsPage() {
   const query = useDeferredValue(q.trim());
   const [limit, setLimit] = useState(150);
   const navigate = useNavigate();
+  const t = useT();
   const { data: meta } = useMeta();
   const items = useAllItems();
   // Text search runs on the server (accents, plurals, "ohm" for Ω), ranked
@@ -104,11 +107,11 @@ export function ItemsPage() {
 
   return (
     <Page
-      title="Items"
-      subtitle={items.data && `${items.data.length} items in the catalogue`}
+      title={t.items.title}
+      subtitle={items.data && t.items.subtitle(items.data.length)}
       actions={
         <Link to="/items/new" className="btn btn-primary">
-          <Plus size={16} /> New item
+          <Plus size={16} /> {t.items.newItem}
         </Link>
       }
     >
@@ -117,7 +120,7 @@ export function ItemsPage() {
           <Search size={16} />
           <input
             type="search"
-            placeholder="Filter by name, value, package, part number…"
+            placeholder={t.items.filter}
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
@@ -125,20 +128,20 @@ export function ItemsPage() {
             }}
           />
         </div>
-        <select value={kind} onChange={(e) => set("kind", e.target.value || null)} aria-label="Kind">
-          <option value="">All types</option>
-          {(Object.keys(kindLabel) as ItemKind[]).map((k) => (
+        <select value={kind} onChange={(e) => set("kind", e.target.value || null)} aria-label={t.items.kind}>
+          <option value="">{t.items.allTypes}</option>
+          {itemKinds.map((k) => (
             <option key={k} value={k}>
-              {kindLabel[k]}
+              {kindLabel(k)}
             </option>
           ))}
         </select>
         <select
           value={category ?? ""}
           onChange={(e) => set("category", e.target.value || null)}
-          aria-label="Category"
+          aria-label={t.common.category}
         >
-          <option value="">All categories</option>
+          <option value="">{t.items.allCategories}</option>
           {[...catPaths.entries()]
             .sort((a, b) => a[1].localeCompare(b[1]))
             .map(([id, p]) => (
@@ -151,7 +154,7 @@ export function ItemsPage() {
 
       <div className="row" style={{ marginBottom: "0.85rem", justifyContent: "space-between" }}>
         <div className="chip-scroll">
-          {shows.map(([v, label]) => (
+          {shows(t).map(([v, label]) => (
             <button
               key={v}
               type="button"
@@ -162,9 +165,7 @@ export function ItemsPage() {
             </button>
           ))}
         </div>
-        <span className="small muted">
-          {filtered.length} {filtered.length === 1 ? "item" : "items"}
-        </span>
+        <span className="small muted">{t.items.count(filtered.length)}</span>
       </div>
 
       {category === null ? (
@@ -198,16 +199,14 @@ export function ItemsPage() {
       ) : filtered.length === 0 ? (
         <Card>
           <Empty
-            title={items.data?.length ? "No items match" : "No items yet"}
+            title={items.data?.length ? t.items.noMatch : t.items.noneYet}
             action={
               <Link to="/items/new" className="btn">
-                <Plus size={15} /> Add an item
+                <Plus size={15} /> {t.items.addItem}
               </Link>
             }
           >
-            {items.data?.length
-              ? "Try other words or clear the filters."
-              : "Add your first item or import a CSV."}
+            {items.data?.length ? t.items.noMatchHint : t.items.noneHint}
           </Empty>
         </Card>
       ) : (
@@ -216,10 +215,10 @@ export function ItemsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th>Owner</th>
-                  <th className="num">In stock</th>
+                  <th>{t.common.item}</th>
+                  <th>{t.common.category}</th>
+                  <th>{t.common.owner}</th>
+                  <th className="num">{t.items.inStock}</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,7 +235,7 @@ export function ItemsPage() {
                             {it.mpn && !it.name.includes(it.mpn) && <span className="mono">{it.mpn}</span>}
                             {it.datasheet_url && (
                               <span>
-                                <FileText size={12} style={{ verticalAlign: -1 }} /> datasheet
+                                <FileText size={12} style={{ verticalAlign: -1 }} /> {t.items.datasheet}
                               </span>
                             )}
                           </div>
@@ -261,7 +260,7 @@ export function ItemsPage() {
                   <div className="row-title">{itemTitle(it)}</div>
                   <div className="row-meta">
                     <span>
-                      {it.category_id ? catPaths.get(it.category_id)?.split(" › ").pop() : kindLabel[it.kind]}
+                      {it.category_id ? catPaths.get(it.category_id)?.split(" › ").pop() : kindLabel(it.kind)}
                     </span>
                     {it.mpn && it.mpn !== it.name && !it.name.includes(it.mpn) && (
                       <span className="mono">{it.mpn}</span>
@@ -277,7 +276,7 @@ export function ItemsPage() {
           {filtered.length > limit && (
             <div className="card-footer center">
               <button type="button" className="btn btn-sm" onClick={() => setLimit((l) => l + 300)}>
-                Show more ({filtered.length - limit} left)
+                {t.items.showMore(filtered.length - limit)}
               </button>
             </div>
           )}
@@ -288,21 +287,22 @@ export function ItemsPage() {
 }
 
 function StockCell({ it }: { it: ItemSummary }) {
+  const t = useT();
   const units = isUnitKind(it.kind);
   const reserved = units ? it.reserved_assets : it.reserved_quantity;
   return (
     <>
       <span className={`qty ${isLow(it) ? "text-warn" : ""}`} style={{ fontWeight: 600 }}>
-        {units ? `${it.available_count}/${it.asset_count} free` : itemTotal(it)}
+        {units ? t.common.free(it.available_count, it.asset_count) : itemTotal(it)}
       </span>
       {reserved > 0 && (
         <span className="sub text-warn tiny" style={{ display: "block" }}>
-          {units ? reserved : qty(reserved, it.unit)} reserved
+          {t.common.nReserved(units ? String(reserved) : qty(reserved, it.unit))}
         </span>
       )}
       {isLow(it) && (
         <span className="sub tiny muted" style={{ display: "block" }}>
-          min {qty(it.min_stock ?? 0, it.unit)}
+          {t.common.min(qty(it.min_stock ?? 0, it.unit))}
         </span>
       )}
     </>

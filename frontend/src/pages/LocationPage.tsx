@@ -18,7 +18,8 @@ import {
   Sheet,
   useToast,
 } from "../components/ui";
-import { code, errorMessage, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
+import { useT } from "../i18n";
+import { code, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
 import { NewLocationSheet, useLocationCounts } from "./LocationsPage";
 
 export function LocationPage() {
@@ -37,6 +38,7 @@ export function LocationPage() {
   );
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   if (q.isPending) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -47,7 +49,7 @@ export function LocationPage() {
   return (
     <Page
       crumbs={[
-        { label: "Locations", to: "/locations" },
+        { label: t.nav.locations, to: "/locations" },
         ...path.map((p) => ({ label: p.name, to: `/locations/${p.id}` })),
       ]}
       title={
@@ -61,21 +63,21 @@ export function LocationPage() {
       subtitle={
         loc.description ||
         (children.length
-          ? `${children.length} places inside · ${total.get(loc.id) ?? things} things in total`
-          : `${things} ${things === 1 ? "thing" : "things"} here`)
+          ? t.loc.subtitleInside(children.length, total.get(loc.id) ?? things)
+          : t.loc.subtitleHere(things))
       }
       actions={
         <>
           <Link className="btn btn-primary" to={`/items/new?location=${loc.id}`}>
-            <Plus size={16} /> Item here
+            <Plus size={16} /> {t.loc.itemHere}
           </Link>
           <button type="button" className="btn" onClick={() => setAdding(true)}>
-            <MapPin size={15} /> Place inside
+            <MapPin size={15} /> {t.loc.placeInside}
           </button>
           <Menu
-            label="More"
+            label={t.common.more}
             trigger={<MoreHorizontal size={18} />}
-            items={[{ label: "Edit place", icon: <Pencil size={15} />, onSelect: () => setEditing(true) }]}
+            items={[{ label: t.loc.editPlace, icon: <Pencil size={15} />, onSelect: () => setEditing(true) }]}
           />
         </>
       }
@@ -86,7 +88,7 @@ export function LocationPage() {
             <section>
               <div className="section-head">
                 <h2>
-                  Inside <span className="count">{children.length}</span>
+                  {t.loc.insideHeading} <span className="count">{children.length}</span>
                 </h2>
               </div>
               <div className="place-grid">
@@ -97,9 +99,7 @@ export function LocationPage() {
                       <PlaceIcon size={15} />
                       <div>
                         <strong>{c.name}</strong>
-                        <small>
-                          {total.get(c.id) ?? 0} {(total.get(c.id) ?? 0) === 1 ? "thing" : "things"}
-                        </small>
+                        <small>{t.common.things(total.get(c.id) ?? 0)}</small>
                       </div>
                     </Link>
                   ))}
@@ -108,7 +108,7 @@ export function LocationPage() {
           )}
 
           {(stock.length > 0 || assets.length > 0) && (
-            <Card title="Contents" count={things}>
+            <Card title={t.loc.contents} count={things}>
               <div className="list">
                 {stock.map((s) => {
                   const lots = s.stock.count_state === "uncounted";
@@ -122,9 +122,11 @@ export function LocationPage() {
                         </div>
                         <div className="row-meta">
                           <span className="mono">{code.item(s.stock.item_id)}</span>
-                          {s.stock.lot && <span>lot {s.stock.lot}</span>}
+                          {s.stock.lot && <span>{t.common.lot(s.stock.lot)}</span>}
                           {s.reserved > 0 && (
-                            <span className="text-warn">{qty(s.reserved, s.item_unit)} reserved</span>
+                            <span className="text-warn">
+                              {t.common.nReserved(qty(s.reserved, s.item_unit))}
+                            </span>
                           )}
                         </div>
                       </Link>
@@ -134,8 +136,8 @@ export function LocationPage() {
                           href={s.item_datasheet_url}
                           target="_blank"
                           rel="noreferrer"
-                          title="Datasheet"
-                          aria-label="Datasheet"
+                          title={t.common.datasheet}
+                          aria-label={t.common.datasheet}
                         >
                           <FileText size={16} />
                         </a>
@@ -158,7 +160,7 @@ export function LocationPage() {
                           })
                         }
                       >
-                        <ArrowUpRight size={14} /> Take
+                        <ArrowUpRight size={14} /> {t.loc.take}
                       </button>
                     </div>
                   );
@@ -173,11 +175,11 @@ export function LocationPage() {
                         {a.asset.serial && <span>{a.asset.serial}</span>}
                       </div>
                     </div>
-                    {a.reserved && <span className="badge badge-warn">Reserved</span>}
+                    {a.reserved && <span className="badge badge-warn">{t.common.reserved}</span>}
                     <span
                       className={`badge ${a.asset.status === "available" ? "badge-ok" : a.asset.status === "broken" ? "badge-danger" : "badge-warn"}`}
                     >
-                      {statusLabel[a.asset.status]}
+                      {statusLabel(a.asset.status)}
                     </span>
                   </Link>
                 ))}
@@ -189,26 +191,26 @@ export function LocationPage() {
             <Card>
               <Empty
                 icon={<MapPin size={20} />}
-                title="This place is empty"
+                title={t.loc.empty}
                 action={
                   <div className="row" style={{ justifyContent: "center" }}>
                     <Link className="btn btn-primary" to={`/items/new?location=${loc.id}`}>
-                      <Plus size={15} /> Item here
+                      <Plus size={15} /> {t.loc.itemHere}
                     </Link>
                     <button type="button" className="btn" onClick={() => setAdding(true)}>
-                      <MapPin size={15} /> Place inside
+                      <MapPin size={15} /> {t.loc.placeInside}
                     </button>
                   </div>
                 }
               >
-                Put items here, or add drawers and shelves inside it.
+                {t.loc.emptyHint}
               </Empty>
             </Card>
           )}
         </div>
 
         <div className="stack" style={{ gap: "1.25rem" }}>
-          <Card title="Label">
+          <Card title={t.common.label}>
             <LabelCard code={`L${loc.id}`} caption={loc.name} bare />
           </Card>
         </div>
@@ -226,9 +228,9 @@ export function LocationPage() {
         <ActionSheet
           open
           onClose={() => setTaking(null)}
-          title="Take"
+          title={t.stock.take}
           subtitle={`${taking.name} · ${loc.name}`}
-          submitLabel="Take"
+          submitLabel={t.stock.take}
           unit={taking.unit}
           max={taking.stock.count_state === "uncounted" ? undefined : taking.stock.quantity}
           free={
@@ -239,7 +241,10 @@ export function LocationPage() {
             await api("POST", `/api/stock/${taking.stock.id}/take`, v);
             qc.invalidateQueries();
             toast(
-              `Took ${taking.stock.count_state === "uncounted" ? "some" : qty(v.quantity, taking.unit)} ${taking.name}`,
+              t.stock.tookItem(
+                taking.stock.count_state === "uncounted" ? t.stock.some : qty(v.quantity, taking.unit),
+                taking.name,
+              ),
             );
           }}
         />
@@ -258,6 +263,7 @@ function EditLocationSheet(props: { onClose: () => void; detail: LocationDetail;
   const [error, setError] = useState<unknown>(null);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const t = useT();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -272,57 +278,52 @@ function EditLocationSheet(props: { onClose: () => void; detail: LocationDetail;
       qc.invalidateQueries({ queryKey: ["locations"] });
       props.onClose();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   async function remove() {
-    if (!confirm(`Delete ${loc.name}?`)) return;
+    if (!confirm(t.loc.confirmDelete(loc.name))) return;
     try {
       await api("DELETE", `/api/locations/${loc.id}`);
       qc.invalidateQueries({ queryKey: ["locations"] });
       navigate(loc.parent_id ? `/locations/${loc.parent_id}` : "/locations", { replace: true });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   return (
-    <Sheet
-      open
-      onClose={props.onClose}
-      title="Edit place"
-      subtitle="Moving it moves everything inside it too."
-    >
+    <Sheet open onClose={props.onClose} title={t.loc.editPlace} subtitle={t.loc.editSubtitle}>
       <form onSubmit={submit} className="form">
         <label className="field">
-          <span>Name</span>
+          <span>{t.common.name}</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required />
         </label>
         <label className="field">
-          <span>Description</span>
+          <span>{t.common.description}</span>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g. Grey cabinet by the window"
+            placeholder={t.loc.descriptionPh}
           />
         </label>
         <label className="field">
-          <span>Inside</span>
+          <span>{t.common.inside}</span>
           <LocationSelect
             value={parent}
             onChange={setParent}
             exclude={loc.id}
-            emptyLabel="Nothing — it's a room"
+            emptyLabel={t.common.nothingRoom}
           />
         </label>
         <ErrorBox error={error} />
         <button type="submit" className="btn btn-primary btn-lg btn-block">
-          Save
+          {t.common.save}
         </button>
         {props.canDelete && (
           <button type="button" className="btn btn-danger btn-block" onClick={remove}>
-            <Trash2 size={15} /> Delete place
+            <Trash2 size={15} /> {t.loc.deletePlace}
           </button>
         )}
       </form>

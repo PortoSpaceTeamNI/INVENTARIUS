@@ -21,7 +21,9 @@ import {
 } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { ItemKind, MovementRow } from "../api";
+import { ApiError, type ItemKind, type MovementRow } from "../api";
+import { useT } from "../i18n";
+import { serverText } from "../i18n/server";
 import { forLabel, locationPaths, qty, useLocations, useMeta, when } from "../lib";
 
 /* ---------------------------------------------------------------- layout */
@@ -33,10 +35,11 @@ export function Page(props: {
   crumbs?: { label: ReactNode; to: string }[];
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <div>
       {props.crumbs && props.crumbs.length > 0 && (
-        <nav className="crumbs" aria-label="Breadcrumb">
+        <nav className="crumbs" aria-label={t.nav.breadcrumb}>
           {props.crumbs.map((c, i) => (
             <span key={c.to} className="row" style={{ gap: "0.2rem" }}>
               {i > 0 && <ChevronRight size={13} />}
@@ -83,8 +86,9 @@ export function Card(props: {
 }
 
 export function Loading({ rows = 4 }: { rows?: number }) {
+  const t = useT();
   return (
-    <div className="stack" role="status" aria-busy="true" aria-label="Loading">
+    <div className="stack" role="status" aria-busy="true" aria-label={t.common.loading}>
       <div className="skeleton" style={{ height: 28, width: "40%" }} />
       <div className="card">
         {Array.from({ length: rows }, (_, i) => (
@@ -102,12 +106,20 @@ export function Loading({ rows = 4 }: { rows?: number }) {
   );
 }
 
+/** Shows an error; server messages (and strings from the server) are translated when known. */
 export function ErrorBox({ error }: { error: unknown }) {
+  useT(); // re-render in the new language
   if (!error) return null;
   return (
     <div className="alert alert-danger" role="alert">
       <AlertTriangle size={16} />
-      <span>{error instanceof Error ? error.message : String(error)}</span>
+      <span>
+        {error instanceof ApiError || typeof error === "string"
+          ? serverText(error instanceof Error ? error.message : error)
+          : error instanceof Error
+            ? error.message
+            : String(error)}
+      </span>
     </div>
   );
 }
@@ -212,6 +224,7 @@ export function Sheet(props: {
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const t = useT();
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -239,7 +252,7 @@ export function Sheet(props: {
             type="button"
             className="btn btn-ghost icon-btn btn-sm"
             onClick={props.onClose}
-            aria-label="Close"
+            aria-label={t.common.close}
           >
             <XCircle size={18} />
           </button>
@@ -327,21 +340,6 @@ export function Menu(props: {
 
 /* ---------------------------------------------------------------- history */
 
-const kindText: Record<string, string> = {
-  receive: "added",
-  take: "took",
-  return: "put back",
-  move: "moved",
-  adjust: "counted",
-  write_off: "wrote off",
-  borrow: "borrowed",
-  give_back: "returned",
-  asset_create: "registered",
-  asset_update: "updated",
-  reserve: "reserved",
-  unreserve: "released the reservation of",
-};
-
 const kindStyle: Record<string, [typeof Package, string]> = {
   receive: [PackagePlus, "in"],
   take: [ArrowUpRight, "out"],
@@ -361,9 +359,9 @@ const kindStyle: Record<string, [typeof Package, string]> = {
 export function History({ rows, showItem }: { rows: MovementRow[]; showItem?: boolean }) {
   const { data: meta } = useMeta();
   const { data: locs } = useLocations();
+  const t = useT();
   const paths = locationPaths(locs);
-  if (rows.length === 0)
-    return <Empty icon={<ClipboardCheck size={20} />}>Nothing has happened here yet.</Empty>;
+  if (rows.length === 0) return <Empty icon={<ClipboardCheck size={20} />}>{t.history.empty}</Empty>;
   return (
     <ul className="timeline">
       {rows.map(({ movement: m, user_name, item_name, item_unit }) => {
@@ -379,7 +377,7 @@ export function History({ rows, showItem }: { rows: MovementRow[]; showItem?: bo
             </span>
             <div className="tl-body">
               <div>
-                <strong>{user_name}</strong> {kindText[m.kind] ?? m.kind}{" "}
+                <strong>{user_name}</strong> {t.history.kind[m.kind] ?? m.kind}{" "}
                 {showQty && m.kind !== "adjust" && (
                   <strong className="num">{qty(Math.abs(m.quantity), item_unit)} </strong>
                 )}
@@ -401,7 +399,7 @@ export function History({ rows, showItem }: { rows: MovementRow[]; showItem?: bo
                 )}
                 {purpose && <span className="badge badge-info">{purpose}</span>}
               </div>
-              {m.note && <div className="tl-note">“{m.note}”</div>}
+              {m.note && <div className="tl-note">“{serverText(m.note)}”</div>}
               <div className="tl-time">{when(m.at)}</div>
             </div>
           </li>

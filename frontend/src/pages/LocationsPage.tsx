@@ -5,7 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, get, type Location } from "../api";
 import { LocationSelect } from "../components/pickers";
 import { Card, Empty, ErrorBox, Loading, Page, Sheet } from "../components/ui";
-import { errorMessage, useLocations } from "../lib";
+import { useT } from "../i18n";
+import { useLocations } from "../lib";
 
 interface Count {
   id: number;
@@ -45,6 +46,7 @@ export function LocationsPage() {
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState("");
   const [open, setOpen] = useState<Set<number> | null>(null);
+  const t = useT();
 
   // Places matching the filter, plus their ancestors so they stay visible.
   const visible = useMemo(() => {
@@ -75,11 +77,11 @@ export function LocationsPage() {
 
   return (
     <Page
-      title="Locations"
-      subtitle={locs && `${locs.length} places in ${roots.length} ${roots.length === 1 ? "room" : "rooms"}`}
+      title={t.locs.title}
+      subtitle={locs && t.locs.subtitle(locs.length, roots.length)}
       actions={
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-          <Plus size={16} /> New place
+          <Plus size={16} /> {t.locs.newPlace}
         </button>
       }
     >
@@ -89,16 +91,16 @@ export function LocationsPage() {
           <Search size={16} />
           <input
             type="search"
-            placeholder="Find a place…"
+            placeholder={t.locs.find}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
         <button type="button" className="btn" onClick={() => setOpen(new Set(locs?.map((l) => l.id)))}>
-          <ChevronsUpDown size={15} /> Expand all
+          <ChevronsUpDown size={15} /> {t.locs.expandAll}
         </button>
         <button type="button" className="btn" onClick={() => setOpen(new Set())}>
-          <ChevronsDownUp size={15} /> Collapse
+          <ChevronsDownUp size={15} /> {t.locs.collapse}
         </button>
       </div>
       {isPending ? (
@@ -107,14 +109,14 @@ export function LocationsPage() {
         <Card>
           <Empty
             icon={<MapPin size={20} />}
-            title="No places yet"
+            title={t.locs.noneYet}
             action={
               <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-                <Plus size={15} /> Add the room
+                <Plus size={15} /> {t.locs.addRoom}
               </button>
             }
           >
-            Start with the room, then add cabinets, shelves, boxes and drawers inside it.
+            {t.locs.noneHint}
           </Empty>
         </Card>
       ) : (
@@ -156,6 +158,7 @@ function TreeNode(props: {
     .sort(byName);
   const open = props.isOpen(props.loc.id);
   const n = props.total.get(props.loc.id) ?? 0;
+  const t = useT();
   return (
     <li>
       <div className="tree-row">
@@ -163,7 +166,7 @@ function TreeNode(props: {
           type="button"
           className={`tree-toggle ${open ? "open" : ""} ${children.length ? "" : "leaf"}`}
           onClick={() => props.toggle(props.loc.id)}
-          aria-label={open ? "Collapse" : "Expand"}
+          aria-label={open ? t.locs.collapse : t.locs.expand}
           aria-expanded={open}
         >
           <ChevronRight size={16} />
@@ -175,8 +178,8 @@ function TreeNode(props: {
           </span>
         </Link>
         <span className="tree-meta">
-          {children.length > 0 && `${children.length} inside · `}
-          {n} {n === 1 ? "thing" : "things"}
+          {children.length > 0 && t.locs.nInside(children.length)}
+          {t.common.things(n)}
         </span>
       </div>
       {open && children.length > 0 && props.depth < 20 && (
@@ -197,6 +200,7 @@ export function NewLocationSheet(props: { open: boolean; onClose: () => void; pa
   const [error, setError] = useState<unknown>(null);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const t = useT();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -213,39 +217,34 @@ export function NewLocationSheet(props: { open: boolean; onClose: () => void; pa
       props.onClose();
       if (props.parentId === undefined) navigate(`/locations/${loc.id}`);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     }
   }
 
   return (
-    <Sheet
-      open={props.open}
-      onClose={props.onClose}
-      title="New place"
-      subtitle="A room, cabinet, shelf, box or drawer."
-    >
+    <Sheet open={props.open} onClose={props.onClose} title={t.locs.newPlace} subtitle={t.locs.newSubtitle}>
       <form onSubmit={submit} className="form">
         <label className="field">
-          <span>Name</span>
+          <span>{t.common.name}</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Shelf C, Gaveta 4"
+            placeholder={t.locs.namePh}
             required
             autoFocus
           />
         </label>
         <label className="field">
-          <span>Inside</span>
-          <LocationSelect value={parent} onChange={setParent} emptyLabel="Nothing — it's a room" />
+          <span>{t.common.inside}</span>
+          <LocationSelect value={parent} onChange={setParent} emptyLabel={t.common.nothingRoom} />
         </label>
         <label className="check">
           <input type="checkbox" checked={print} onChange={(e) => setPrint(e.target.checked)} />
-          Print its label
+          {t.locs.printLabel}
         </label>
         <ErrorBox error={error} />
         <button type="submit" className="btn btn-primary btn-lg btn-block">
-          Create place
+          {t.locs.create}
         </button>
       </form>
     </Sheet>

@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { ApiError } from "./api";
 import { ToastProvider } from "./components/ui";
+import { LangProvider } from "./i18n";
 import "./styles.css";
 
 const queryClient = new QueryClient({
@@ -20,13 +21,15 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
+      <LangProvider>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </LangProvider>
     </StrictMode>,
   );
 }

@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from "react";
 import { ApiError, type CountState, type Reservation } from "../api";
-import { errorMessage, forLabel, loadPurpose, qty, savePurpose, useMe, useMeta } from "../lib";
+import { useT } from "../i18n";
+import { serverText } from "../i18n/server";
+import { forLabel, loadPurpose, qty, savePurpose, useMe, useMeta } from "../lib";
 import { LocationSelect, OrgSelect, ownerValue, parseOwnerValue } from "./pickers";
 import { ErrorBox, Sheet } from "./ui";
 
@@ -77,19 +79,20 @@ export function ActionSheet(props: {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const t = useT();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     const q = Number(quantity.replace(",", "."));
     if (showQuantity && !(q > 0) && !(props.allowZero && q === 0)) {
-      setError(props.allowZero ? "Enter the number you counted." : "Enter a quantity greater than zero.");
+      setError(props.allowZero ? t.action.enterCount : t.action.enterQty);
       return;
     }
     const p = parseOwnerValue(purpose);
     if (props.askPurpose) savePurpose(p);
     if (props.noteRequired && !note.trim()) {
-      setError("Say what it is for.");
+      setError(t.action.sayWhat);
       return;
     }
     const values: ActionValues = {
@@ -109,12 +112,12 @@ export function ActionSheet(props: {
         await props.onSubmit(values);
       } catch (err) {
         if (!(err instanceof ApiError && err.status === 409)) throw err;
-        if (!confirm(`${err.message}\n\nUse it anyway?`)) return;
+        if (!confirm(`${serverText(err.message)}\n\n${t.action.useAnyway}`)) return;
         await props.onSubmit({ ...values, override_reserved: true });
       }
       props.onClose();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err);
     } finally {
       setBusy(false);
     }
@@ -127,10 +130,11 @@ export function ActionSheet(props: {
         {showQuantity && (
           <label className="field">
             <span>
-              Quantity{props.unit && props.unit !== "pcs" ? ` (${props.unit})` : ""}
-              {props.max !== undefined && <span className="muted"> · {props.max} here</span>}
+              {t.action.quantity}
+              {props.unit && props.unit !== "pcs" ? ` (${props.unit})` : ""}
+              {props.max !== undefined && <span className="muted">{t.action.here(props.max)}</span>}
               {props.free !== undefined && props.free !== props.max && (
-                <span className="muted"> · {qty(Math.max(props.free, 0))} free</span>
+                <span className="muted">{t.action.free(qty(Math.max(props.free, 0)))}</span>
               )}
             </span>
             <div className="stepper">
@@ -156,15 +160,19 @@ export function ActionSheet(props: {
         )}
         {props.reservations && props.reservations.length > 0 && (
           <label className="field">
-            <span>Take from</span>
+            <span>{t.action.takeFrom}</span>
             <select value={reservation} onChange={(e) => setReservation(e.target.value)}>
               <option value="">
-                Free stock{props.free !== undefined && ` (${qty(Math.max(props.free, 0))})`}
+                {t.action.freeStock}
+                {props.free !== undefined && ` (${qty(Math.max(props.free, 0))})`}
               </option>
               {props.reservations.map((r) => (
                 <option key={r.id} value={r.id}>
-                  Reserved for {forLabel(meta, r.project_id, r.department_id) || "the team"} (
-                  {qty(r.quantity)}) — {r.note}
+                  {t.action.reservedFor(
+                    forLabel(meta, r.project_id, r.department_id) || t.common.theTeam,
+                    qty(r.quantity),
+                    r.note,
+                  )}
                 </option>
               ))}
             </select>
@@ -172,41 +180,37 @@ export function ActionSheet(props: {
         )}
         {props.askPurpose && !reservation && (
           <label className="field">
-            <span>For</span>
-            <OrgSelect value={purpose} onChange={setPurpose} noneLabel="General / team" />
+            <span>{t.action.for}</span>
+            <OrgSelect value={purpose} onChange={setPurpose} noneLabel={t.action.generalTeam} />
           </label>
         )}
         {props.askLocation && (
           <label className="field">
-            <span>{props.askLocation === "required" ? "To" : "Put it in (optional)"}</span>
+            <span>{props.askLocation === "required" ? t.action.to : t.action.putIn}</span>
             <LocationSelect
               value={location}
               onChange={setLocation}
               exclude={props.excludeLocation}
               required={props.askLocation === "required"}
-              emptyLabel={props.askLocation === "required" ? "Choose a location…" : "Where it was before"}
+              emptyLabel={props.askLocation === "required" ? t.common.chooseLocation : t.action.whereBefore}
             />
           </label>
         )}
         {props.askDue && (
           <label className="field">
-            <span>Bring it back by (optional)</span>
+            <span>{t.action.bringBack}</span>
             <input type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />
           </label>
         )}
         {props.askUntil && (
           <label className="field">
-            <span>Until (optional)</span>
+            <span>{t.action.until}</span>
             <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
           </label>
         )}
         <label className="field">
-          <span>{props.noteLabel ?? "Note (optional)"}</span>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. avionics board rev B"
-          />
+          <span>{props.noteLabel ?? t.action.note}</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t.action.notePh} />
         </label>
         <ErrorBox error={error} />
         <button
@@ -214,24 +218,21 @@ export function ActionSheet(props: {
           className={`btn btn-lg btn-block ${props.danger ? "btn-danger solid" : "btn-primary"}`}
           disabled={busy}
         >
-          {busy ? "Saving…" : props.submitLabel}
+          {busy ? t.common.saving : props.submitLabel}
         </button>
       </form>
     </Sheet>
   );
 }
 
-const countStates: [CountState, string][] = [
-  ["exact", "Exact"],
-  ["approx", "About"],
-  ["uncounted", "Lots (not counted)"],
-];
+const countStates: CountState[] = ["exact", "approx", "uncounted"];
 
 /** Exact count, an estimate, or "plenty, not counted" (screws, nuts). */
 export function CountStatePicker(props: { value: CountState; onChange: (v: CountState) => void }) {
+  const t = useT();
   return (
-    <div className="segmented" role="radiogroup" aria-label="How well is it counted?">
-      {countStates.map(([v, label]) => (
+    <div className="segmented" role="radiogroup" aria-label={t.action.howCounted}>
+      {countStates.map((v) => (
         <button
           key={v}
           type="button"
@@ -240,7 +241,7 @@ export function CountStatePicker(props: { value: CountState; onChange: (v: Count
           className={props.value === v ? "on" : ""}
           onClick={() => props.onChange(v)}
         >
-          {label}
+          {t.action.countStates[v]}
         </button>
       ))}
     </div>

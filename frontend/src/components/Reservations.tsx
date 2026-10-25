@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Bookmark, FileText } from "lucide-react";
 import { api, type Reservation } from "../api";
+import { useT } from "../i18n";
 import { day, errorMessage, forLabel, qty, useMe, useMeta, when } from "../lib";
 import { useToast } from "./ui";
 
@@ -10,13 +11,14 @@ export function ReservationList({ reservations, unit }: { reservations: Reservat
   const { data: me } = useMe();
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   async function release(r: Reservation) {
-    if (!confirm(`Release the reservation “${r.note}”? It becomes free to use.`)) return;
+    if (!confirm(t.resv.confirmRelease(r.note))) return;
     try {
       await api("POST", `/api/reservations/${r.id}/release`);
       qc.invalidateQueries();
-      toast("Reservation released");
+      toast(t.resv.released);
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -42,19 +44,19 @@ export function ReservationList({ reservations, unit }: { reservations: Reservat
             <div className="row-main">
               <div className="row-title">
                 {r.stock_id !== null && <span className="num">{qty(r.quantity, unit)} </span>}
-                for {forLabel(meta, r.project_id, r.department_id) || "the team"}
+                {t.resv.for(forLabel(meta, r.project_id, r.department_id) || t.common.theTeam)}
               </div>
               <div className="row-meta">
                 <span>“{r.note}”</span>
                 <span>
                   {r.user_name}, {when(r.created_at)}
                 </span>
-                {r.until && <span>until {day(r.until)}</span>}
+                {r.until && <span>{t.resv.until(day(r.until))}</span>}
               </div>
             </div>
             {mine && (
               <button type="button" className="btn btn-sm" onClick={() => release(r)}>
-                Release
+                {t.resv.release}
               </button>
             )}
           </div>
@@ -69,6 +71,7 @@ export function StockMeter({ total, reserved, unit }: { total: number; reserved:
   const free = Math.max(total - reserved, 0);
   const short = reserved - total;
   const pct = (n: number) => `${total > 0 ? Math.min((n / total) * 100, 100) : 0}%`;
+  const t = useT();
   return (
     <div className="stack-sm">
       <div className="meter" aria-hidden="true">
@@ -78,25 +81,26 @@ export function StockMeter({ total, reserved, unit }: { total: number; reserved:
       <div className="legend">
         <span>
           <i style={{ background: "var(--ok)" }} />
-          <strong className="num">{qty(free, unit)}</strong> free to use
+          <strong className="num">{qty(free, unit)}</strong> {t.resv.freeToUse}
         </span>
         {reserved > 0 && (
           <span>
             <i style={{ background: "var(--warn)" }} />
-            <strong className="num">{qty(reserved, unit)}</strong> reserved
+            <strong className="num">{qty(reserved, unit)}</strong> {t.resv.reserved}
           </span>
         )}
-        {short > 0 && <span className="text-danger">{qty(short, unit)} short of the reservations</span>}
+        {short > 0 && <span className="text-danger">{t.resv.short(qty(short, unit))}</span>}
       </div>
     </div>
   );
 }
 
 export function DatasheetButton({ url, size }: { url: string; size?: "sm" }) {
+  const t = useT();
   if (!url) return null;
   return (
     <a className={`btn ${size === "sm" ? "btn-sm" : ""}`} href={url} target="_blank" rel="noreferrer">
-      <FileText size={15} /> Datasheet
+      <FileText size={15} /> {t.common.datasheet}
     </a>
   );
 }

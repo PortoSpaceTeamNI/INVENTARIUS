@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { get, type SearchResult } from "../api";
+import { type Dict, useT } from "../i18n";
 import { itemTitle, itemTotal, kindLabel, locationPaths, useLocations } from "../lib";
 import { ItemIcon, PlaceIcon } from "./ui";
 
@@ -54,11 +55,29 @@ export function SearchPaletteProvider({ children }: { children: ReactNode }) {
   );
 }
 
-const shortcuts: Entry[] = [
-  { key: "scan", group: "Actions", to: "/scan", icon: <ScanLine size={17} />, title: "Scan a label" },
-  { key: "new", group: "Actions", to: "/items/new", icon: <Plus size={17} />, title: "New item" },
-  { key: "print", group: "Actions", to: "/print", icon: <Printer size={17} />, title: "Labels & printer" },
-  { key: "import", group: "Actions", to: "/import", icon: <FileUp size={17} />, title: "Import from CSV" },
+const shortcuts = (t: Dict): Entry[] => [
+  { key: "scan", group: t.search.actions, to: "/scan", icon: <ScanLine size={17} />, title: t.search.scan },
+  {
+    key: "new",
+    group: t.search.actions,
+    to: "/items/new",
+    icon: <Plus size={17} />,
+    title: t.search.newItem,
+  },
+  {
+    key: "print",
+    group: t.search.actions,
+    to: "/print",
+    icon: <Printer size={17} />,
+    title: t.search.labels,
+  },
+  {
+    key: "import",
+    group: t.search.actions,
+    to: "/import",
+    icon: <FileUp size={17} />,
+    title: t.search.import,
+  },
 ];
 
 function Palette({ onClose }: { onClose: () => void }) {
@@ -69,6 +88,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const listRef = useRef<HTMLDivElement>(null);
   const { data: locs } = useLocations();
   const paths = useMemo(() => locationPaths(locs), [locs]);
+  const t = useT();
   const search = useQuery({
     queryKey: ["search", query],
     queryFn: () => get<SearchResult>(`/api/search?q=${encodeURIComponent(query)}`),
@@ -77,46 +97,46 @@ function Palette({ onClose }: { onClose: () => void }) {
   });
 
   const entries: Entry[] = useMemo(() => {
-    if (!query) return shortcuts;
+    if (!query) return shortcuts(t);
     const r = search.data;
     if (!r) return [];
     const out: Entry[] = [];
     if (r.code)
       out.push({
         key: `code-${r.code.code}`,
-        group: "Label",
+        group: t.search.label,
         to: r.code.path,
         icon: (
           <span className="row-icon kind-consumable">
             <QrCode size={17} />
           </span>
         ),
-        title: `Open label ${r.code.code}`,
+        title: t.search.openLabel(r.code.code),
       });
     for (const it of r.items)
       out.push({
         key: `i${it.id}`,
-        group: "Items",
+        group: t.search.items,
         to: `/items/${it.id}`,
         icon: <ItemIcon kind={it.kind} photo={it.photo} size={16} />,
         title: itemTitle(it),
-        meta: [kindLabel[it.kind], it.mpn].filter(Boolean).join(" · "),
+        meta: [kindLabel(it.kind), it.mpn].filter(Boolean).join(" · "),
         end:
           it.kind === "tool" || it.kind === "flight_hw"
-            ? `${it.available_count}/${it.asset_count} free`
+            ? t.common.free(it.available_count, it.asset_count)
             : itemTotal(it),
       });
     for (const l of r.locations)
       out.push({
         key: `l${l.id}`,
-        group: "Places",
+        group: t.search.places,
         to: `/locations/${l.id}`,
         icon: <PlaceIcon size={16} />,
         title: l.name,
         meta: paths.get(l.id),
       });
     return out;
-  }, [query, search.data, paths]);
+  }, [query, search.data, paths, t]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: new results reset the selection
   useEffect(() => setActive(0), [entries]);
@@ -137,12 +157,12 @@ function Palette({ onClose }: { onClose: () => void }) {
     // biome-ignore lint/a11y/useKeyWithClickEvents: see above
     // biome-ignore lint/a11y/noStaticElementInteractions: see above
     <div className="palette" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette-box" role="dialog" aria-label="Search">
+      <div className="palette-box" role="dialog" aria-label={t.search.search}>
         <div className="palette-input">
           <Search size={18} />
           <input
             autoFocus
-            placeholder="Search items, part numbers, places, or type a code like A107…"
+            placeholder={t.search.placeholder}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
@@ -157,14 +177,14 @@ function Palette({ onClose }: { onClose: () => void }) {
             }}
           />
           <button type="button" className="btn btn-ghost btn-sm only-mobile" onClick={onClose}>
-            Cancel
+            {t.common.cancel}
           </button>
         </div>
         <div className="palette-results" ref={listRef}>
           {query && search.data && entries.length === 0 && (
             <div className="empty">
-              <strong>No results for “{query}”</strong>
-              <span>Try a part number, a value like “10k 0603”, or a place.</span>
+              <strong>{t.search.noResults(query)}</strong>
+              <span>{t.search.noResultsHint}</span>
             </div>
           )}
           {entries.map((e, i) => {
@@ -196,13 +216,13 @@ function Palette({ onClose }: { onClose: () => void }) {
         </div>
         <div className="palette-foot">
           <span>
-            <kbd>↑</kbd> <kbd>↓</kbd> to move
+            <kbd>↑</kbd> <kbd>↓</kbd> {t.search.toMove}
           </span>
           <span>
-            <kbd>Enter</kbd> to open
+            <kbd>Enter</kbd> {t.search.toOpen}
           </span>
           <span>
-            <kbd>Esc</kbd> to close
+            <kbd>Esc</kbd> {t.search.toClose}
           </span>
         </div>
       </div>

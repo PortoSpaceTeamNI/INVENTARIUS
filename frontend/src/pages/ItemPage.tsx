@@ -19,6 +19,7 @@ import {
   Stat,
   useToast,
 } from "../components/ui";
+import { useT } from "../i18n";
 import {
   code,
   day,
@@ -59,6 +60,7 @@ export function ItemPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
+  const t = useT();
 
   if (q.isPending) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -84,14 +86,14 @@ export function ItemPage() {
       await api("PUT", `/api/items/${id}/photo`, file);
       qc.invalidateQueries({ queryKey: ["item", id] });
       qc.invalidateQueries({ queryKey: ["items"] });
-      toast("Photo updated");
+      toast(t.item.photoUpdated);
     } catch (e) {
       toast(errorMessage(e), "error");
     }
   }
 
   async function remove() {
-    if (!confirm(`Delete ${item.name}, its stock, units and history? This cannot be undone.`)) return;
+    if (!confirm(t.item.confirmDelete(item.name))) return;
     try {
       await api("DELETE", `/api/items/${id}`);
       qc.invalidateQueries();
@@ -101,7 +103,7 @@ export function ItemPage() {
     }
   }
 
-  const crumbs = [{ label: "Items", to: "/items" }];
+  const crumbs = [{ label: t.nav.items, to: "/items" }];
   if (item.category_id && catPaths.get(item.category_id))
     crumbs.push({ label: catPaths.get(item.category_id) ?? "", to: `/items?category=${item.category_id}` });
 
@@ -115,22 +117,22 @@ export function ItemPage() {
             className="photo"
             onClick={() => can_edit && photoInput.current?.click()}
             disabled={!can_edit}
-            aria-label={item.photo ? "Change photo" : "Add photo"}
+            aria-label={item.photo ? t.item.changePhoto : t.item.addPhoto}
           >
             {item.photo ? (
               <img src={`/photos/${item.photo}`} alt={item.name} />
             ) : (
               <Camera size={26} strokeWidth={1.6} />
             )}
-            {can_edit && <span className="photo-edit">{item.photo ? "Change" : "Add photo"}</span>}
+            {can_edit && <span className="photo-edit">{item.photo ? t.item.change : t.item.addPhoto}</span>}
           </button>
           <div style={{ minWidth: 0 }}>
             <div>{item.name}</div>
             <div className="tags" style={{ marginTop: "0.6rem" }}>
-              <span className={`badge kind-${item.kind}`}>{kindLabel[item.kind]}</span>
+              <span className={`badge kind-${item.kind}`}>{kindLabel(item.kind)}</span>
               {item.package && <span className="badge mono">{item.package}</span>}
               <span className="badge">{ownerLabel(meta, item)}</span>
-              {low && <span className="badge badge-warn">Running low</span>}
+              {low && <span className="badge badge-warn">{t.item.low}</span>}
             </div>
           </div>
           <input
@@ -146,18 +148,20 @@ export function ItemPage() {
       actions={
         <>
           <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-            <Plus size={16} /> {units ? "Add units" : "Add stock"}
+            <Plus size={16} /> {units ? t.item.addUnits : t.item.addStock}
           </button>
           {can_edit && (
             <Link to={`/items/${id}/edit`} className="btn">
-              <Pencil size={15} /> Edit
+              <Pencil size={15} /> {t.common.edit}
             </Link>
           )}
           {me?.role === "admin" && (
             <Menu
-              label="More"
+              label={t.common.more}
               trigger={<MoreHorizontal size={18} />}
-              items={[{ label: "Delete item", icon: <Trash2 size={15} />, onSelect: remove, danger: true }]}
+              items={[
+                { label: t.item.deleteItem, icon: <Trash2 size={15} />, onSelect: remove, danger: true },
+              ]}
             />
           )}
         </>
@@ -166,39 +170,41 @@ export function ItemPage() {
       <div className="stats">
         {units ? (
           <>
-            <Stat label="Units" value={live.length} />
+            <Stat label={t.item.units} value={live.length} />
             <Stat
-              label="Available"
+              label={t.item.available}
               value={<span className="text-ok">{live.filter((a) => a.status === "available").length}</span>}
             />
-            <Stat label="On loan" value={live.filter((a) => a.status === "on_loan").length} />
+            <Stat label={t.item.onLoan} value={live.filter((a) => a.status === "on_loan").length} />
             <Stat
-              label="Broken / repair"
+              label={t.item.brokenRepair}
               value={live.filter((a) => a.status === "broken" || a.status === "in_repair").length}
             />
           </>
         ) : (
           <>
             <Stat
-              label="In stock"
+              label={t.item.inStock}
               value={<span className={low ? "text-warn" : ""}>{totalText}</span>}
               hint={
                 item.min_stock != null
-                  ? `minimum ${qty(item.min_stock, item.unit)}`
+                  ? t.item.minimum(qty(item.min_stock, item.unit))
                   : item.unit === "pcs"
-                    ? "pieces"
+                    ? t.common.pieces
                     : item.unit
               }
             />
             <Stat
-              label="Free to use"
-              value={uncountedLots && !total ? "Lots" : qty(Math.max(total - reservedStock, 0), item.unit)}
+              label={t.item.freeToUse}
+              value={
+                uncountedLots && !total ? t.common.lots : qty(Math.max(total - reservedStock, 0), item.unit)
+              }
             />
-            <Stat label="Reserved" value={qty(reservedStock, item.unit)} />
+            <Stat label={t.common.reserved} value={qty(reservedStock, item.unit)} />
             <Stat
-              label="Places"
+              label={t.item.places}
               value={stock.length}
-              hint={uncountedLots ? `${uncountedLots} not counted` : undefined}
+              hint={uncountedLots ? t.item.notCounted(uncountedLots) : undefined}
             />
           </>
         )}
@@ -207,26 +213,24 @@ export function ItemPage() {
       <div className="layout-2" style={{ marginTop: "1.25rem" }}>
         <div className="stack" style={{ gap: "1.25rem" }}>
           <Card
-            title={units ? "Units" : "Where it is"}
+            title={units ? t.item.units : t.item.whereItIs}
             count={units ? assets.length : stock.length}
             actions={
               <button type="button" className="btn btn-sm" onClick={() => setAdding(true)}>
-                <Plus size={14} /> Add
+                <Plus size={14} /> {t.common.add}
               </button>
             }
           >
             {stock.length === 0 && assets.length === 0 ? (
               <Empty
-                title="None registered yet"
+                title={t.item.noneYet}
                 action={
                   <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-                    <Plus size={15} /> {units ? "Add units" : "Add stock"}
+                    <Plus size={15} /> {units ? t.item.addUnits : t.item.addStock}
                   </button>
                 }
               >
-                {units
-                  ? "Register each unit so it can be borrowed."
-                  : "Say where it is and how many there are."}
+                {units ? t.item.unitsHint : t.item.stockHint}
               </Empty>
             ) : (
               <div className="list">
@@ -237,14 +241,14 @@ export function ItemPage() {
                       <PlaceIcon size={16} />
                       <div className="row-main">
                         <div className="row-title">
-                          {paths.get(s.location_id) ?? `Location ${s.location_id}`}
+                          {paths.get(s.location_id) ?? t.item.location(s.location_id)}
                           <span className="faint"> › </span>
                           <span className="mono">{code.item(item.id)}</span>
                         </div>
                         <div className="row-meta">
-                          <span>stock {s.id}</span>
-                          {s.lot && <span>lot {s.lot}</span>}
-                          {s.expires_on && <span>expires {day(s.expires_on)}</span>}
+                          <span>{t.common.stockN(s.id)}</span>
+                          {s.lot && <span>{t.common.lot(s.lot)}</span>}
+                          {s.expires_on && <span>{t.item.expires(day(s.expires_on))}</span>}
                           {(s.owner_project_id || s.owner_department_id) && (
                             <span>{ownerLabel(meta, s)}</span>
                           )}
@@ -256,7 +260,9 @@ export function ItemPage() {
                         >
                           {stockQty(s, item.unit)}
                         </span>
-                        {r > 0 && <span className="sub text-warn">{qty(r, item.unit)} reserved</span>}
+                        {r > 0 && (
+                          <span className="sub text-warn">{t.common.nReserved(qty(r, item.unit))}</span>
+                        )}
                       </div>
                     </Link>
                   );
@@ -270,13 +276,13 @@ export function ItemPage() {
                         {a.serial && <span className="muted"> · {a.serial}</span>}
                       </div>
                       <div className="row-meta">
-                        <span>{a.location_id ? paths.get(a.location_id) : "No home location"}</span>
+                        <span>{a.location_id ? paths.get(a.location_id) : t.item.noHome}</span>
                       </div>
                     </div>
                     {reservations.some((r) => r.asset_id === a.id) && (
-                      <span className="badge badge-warn">Reserved</span>
+                      <span className="badge badge-warn">{t.common.reserved}</span>
                     )}
-                    <span className={`badge ${statusBadge[a.status]}`}>{statusLabel[a.status]}</span>
+                    <span className={`badge ${statusBadge[a.status]}`}>{statusLabel(a.status)}</span>
                   </Link>
                 ))}
               </div>
@@ -289,63 +295,63 @@ export function ItemPage() {
           </Card>
 
           {reservations.length > 0 && (
-            <Card title="Reserved" count={reservations.length}>
+            <Card title={t.common.reserved} count={reservations.length}>
               <ReservationList reservations={reservations} unit={item.unit} />
             </Card>
           )}
 
-          <Card title="History">
+          <Card title={t.common.history}>
             <History rows={movements} />
           </Card>
         </div>
 
         <div className="stack" style={{ gap: "1.25rem" }}>
-          <Card title="Details">
+          <Card title={t.common.details}>
             <div className="card-pad stack">
               <dl className="facts">
-                <dt>Type</dt>
-                <dd>{kindLabel[item.kind]}</dd>
+                <dt>{t.common.type}</dt>
+                <dd>{kindLabel(item.kind)}</dd>
                 {item.category_id && (
                   <>
-                    <dt>Category</dt>
+                    <dt>{t.common.category}</dt>
                     <dd>{catPaths.get(item.category_id)}</dd>
                   </>
                 )}
                 {item.manufacturer && (
                   <>
-                    <dt>Maker</dt>
+                    <dt>{t.item.maker}</dt>
                     <dd>{item.manufacturer}</dd>
                   </>
                 )}
                 {item.mpn && (
                   <>
-                    <dt>Part no.</dt>
+                    <dt>{t.common.partNo}</dt>
                     <dd className="mono">{item.mpn}</dd>
                   </>
                 )}
                 {item.package && (
                   <>
-                    <dt>Package</dt>
+                    <dt>{t.common.package}</dt>
                     <dd className="mono">{item.package}</dd>
                   </>
                 )}
-                <dt>Owner</dt>
+                <dt>{t.common.owner}</dt>
                 <dd>{ownerLabel(meta, item)}</dd>
                 {!units && (
                   <>
-                    <dt>Unit</dt>
+                    <dt>{t.common.unit}</dt>
                     <dd>{item.unit}</dd>
                   </>
                 )}
                 {item.hazard_class && (
                   <>
-                    <dt>Hazard</dt>
+                    <dt>{t.item.hazard}</dt>
                     <dd className="text-danger">{item.hazard_class}</dd>
                   </>
                 )}
                 {item.storage_notes && (
                   <>
-                    <dt>Storage</dt>
+                    <dt>{t.item.storage}</dt>
                     <dd>{item.storage_notes}</dd>
                   </>
                 )}
@@ -359,23 +365,21 @@ export function ItemPage() {
                 <DatasheetButton url={item.datasheet_url} size="sm" />
                 {item.supplier_url && (
                   <a className="btn btn-sm" href={item.supplier_url} target="_blank" rel="noreferrer">
-                    <ShoppingCart size={14} /> Supplier <ExternalLink size={12} />
+                    <ShoppingCart size={14} /> {t.item.supplier} <ExternalLink size={12} />
                   </a>
                 )}
                 {!item.datasheet_url && can_edit && (
                   <Link className="btn btn-sm btn-ghost" to={`/items/${id}/edit`}>
-                    <Plus size={14} /> Datasheet link
+                    <Plus size={14} /> {t.item.datasheetLink}
                   </Link>
                 )}
               </div>
             </div>
           </Card>
 
-          <Card title="Item label">
+          <Card title={t.item.itemLabel}>
             <p className="small muted" style={{ padding: "0.85rem 1.1rem 0" }}>
-              {units
-                ? "Usually you label the units; this one opens the item page."
-                : "Stick this on every bag of this item; scanning it opens the item page."}
+              {units ? t.item.labelHintUnits : t.item.labelHintStock}
             </p>
             <LabelCard code={`I${item.id}`} caption={item.name} bare />
           </Card>

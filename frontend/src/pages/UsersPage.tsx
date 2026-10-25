@@ -3,9 +3,10 @@ import { Pencil, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { api, get, type Role, type User } from "../api";
 import { Card, Empty, ErrorBox, Loading, Page, Sheet, useToast } from "../components/ui";
+import { useT } from "../i18n";
 import { errorMessage, useMe, useMeta } from "../lib";
 
-const roleLabel: Record<Role, string> = { member: "Member", dept_lead: "Department lead", admin: "Admin" };
+const roles: Role[] = ["member", "dept_lead", "admin"];
 
 export function UsersPage() {
   const users = useQuery({ queryKey: ["users"], queryFn: () => get<User[]>("/api/users") });
@@ -14,6 +15,7 @@ export function UsersPage() {
   const [editing, setEditing] = useState<User | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
 
   async function update(u: User, patch: Partial<Pick<User, "role" | "active" | "department_ids">>) {
     try {
@@ -26,10 +28,10 @@ export function UsersPage() {
 
   if (me?.role !== "admin")
     return (
-      <Page title="People">
+      <Page title={t.users.title}>
         <Card>
-          <Empty icon={<ShieldCheck size={20} />} title="Admins only">
-            Ask an admin to change roles or departments.
+          <Empty icon={<ShieldCheck size={20} />} title={t.users.adminsOnly}>
+            {t.users.adminsOnlyHint}
           </Empty>
         </Card>
       </Page>
@@ -47,9 +49,9 @@ export function UsersPage() {
   const current = editing && users.data?.find((u) => u.id === editing.id);
 
   return (
-    <Page title="People" subtitle="Anyone with a team Google account can sign in, and starts as a member.">
+    <Page title={t.users.title} subtitle={t.users.subtitle}>
       <ErrorBox error={users.error} />
-      <Card count={users.data?.length} title="Team members">
+      <Card count={users.data?.length} title={t.users.members}>
         <div className="list">
           {users.data?.map((u) => (
             <div key={u.id} className="list-row" style={{ opacity: u.active ? 1 : 0.55, flexWrap: "wrap" }}>
@@ -65,12 +67,12 @@ export function UsersPage() {
                   {u.name}
                   {u.id === me.id && (
                     <span className="badge badge-info" style={{ marginLeft: 6 }}>
-                      You
+                      {t.common.you}
                     </span>
                   )}
                   {!u.active && (
                     <span className="badge" style={{ marginLeft: 6 }}>
-                      Disabled
+                      {t.users.disabled}
                     </span>
                   )}
                 </div>
@@ -89,7 +91,7 @@ export function UsersPage() {
                     style={{ height: 24 }}
                     onClick={() => setEditing(u)}
                   >
-                    <Pencil size={12} /> Departments
+                    <Pencil size={12} /> {t.users.departments}
                   </button>
                 </div>
               </div>
@@ -98,36 +100,33 @@ export function UsersPage() {
                   value={u.role}
                   onChange={(e) => update(u, { role: e.target.value as Role })}
                   disabled={u.id === me.id}
-                  aria-label={`Role of ${u.name}`}
+                  aria-label={t.users.roleOf(u.name)}
                   style={{ width: "auto" }}
                 >
-                  {(Object.keys(roleLabel) as Role[]).map((r) => (
+                  {roles.map((r) => (
                     <option key={r} value={r}>
-                      {roleLabel[r]}
+                      {t.role[r]}
                     </option>
                   ))}
                 </select>
-                <label className="check small" title="Can sign in">
+                <label className="check small" title={t.users.canSignIn}>
                   <input
                     type="checkbox"
                     checked={u.active}
                     disabled={u.id === me.id}
                     onChange={(e) => update(u, { active: e.target.checked })}
                   />
-                  Active
+                  {t.users.active}
                 </label>
               </div>
             </div>
           ))}
         </div>
-        <div className="card-footer muted">
-          Members take, return and borrow. Department leads will approve purchases. Admins manage people,
-          places and the printer.
-        </div>
+        <div className="card-footer muted">{t.users.footer}</div>
       </Card>
 
       {current && (
-        <Sheet open onClose={() => setEditing(null)} title="Departments" subtitle={current.name}>
+        <Sheet open onClose={() => setEditing(null)} title={t.users.departments} subtitle={current.name}>
           <div className="stack">
             {meta?.projects.map((p) => (
               <div key={p.id} className="stack-sm">
@@ -158,7 +157,7 @@ export function UsersPage() {
               </div>
             ))}
             <button type="button" className="btn btn-primary btn-block" onClick={() => setEditing(null)}>
-              Done
+              {t.common.done}
             </button>
           </div>
         </Sheet>

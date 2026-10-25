@@ -2395,3 +2395,62 @@ dialog.sheet::backdrop {
   flex: 1;
   border-top: 1px solid var(--border);
 }
+
+/* ---------------------------------------------------------------- language */
+
+.lang-toggle {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-3);
+  border-radius: 8px;
+}
+
+.lang-toggle button {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.55rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.lang-toggle button.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.lang-toggle.dark {
+  background: var(--shell-hover);
+}
+
+.lang-toggle.dark button {
+  color: var(--shell-muted);
+}
+
+.lang-toggle.dark button.on {
+  background: #f1f5f9;
+  color: var(--shell);
+  box-shadow: none;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.sidebar-bottom .lang-toggle {
+  margin-left: 0.6rem;
+}
+
+.sidebar-bottom .sidebar-foot {
+  align-self: stretch;
+}

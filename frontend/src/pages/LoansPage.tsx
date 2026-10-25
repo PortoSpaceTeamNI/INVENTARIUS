@@ -3,6 +3,7 @@ import { Wrench } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, type OpenLoan } from "../api";
 import { Card, Empty, ErrorBox, ItemIcon, Loading, Page } from "../components/ui";
+import { useT } from "../i18n";
 import { forLabel, useMe, useMeta, when } from "../lib";
 
 /** The "who has what" board for shared tools. */
@@ -15,6 +16,7 @@ export function LoansPage() {
   const { data: meta } = useMeta();
   const { data: me } = useMe();
   const navigate = useNavigate();
+  const t = useT();
   const all = loans.data ?? [];
   const overdue = all.filter((l) => l.overdue);
   const rest = all.filter((l) => !l.overdue);
@@ -25,11 +27,11 @@ export function LoansPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Tool</th>
-              <th>Who</th>
-              <th>For</th>
-              <th>Since</th>
-              <th>Due</th>
+              <th>{t.loans.tool}</th>
+              <th>{t.loans.who}</th>
+              <th>{t.loans.for}</th>
+              <th>{t.loans.since}</th>
+              <th>{t.loans.due}</th>
             </tr>
           </thead>
           <tbody>
@@ -57,7 +59,7 @@ export function LoansPage() {
                   {l.user_name}
                   {l.loan.user_id === me?.id && (
                     <span className="badge badge-info" style={{ marginLeft: 6 }}>
-                      You
+                      {t.common.you}
                     </span>
                   )}
                 </td>
@@ -84,14 +86,14 @@ export function LoansPage() {
             <div className="row-main">
               <div className="row-title">{l.item_name}</div>
               <div className="row-meta">
-                <span>{l.loan.user_id === me?.id ? "You" : l.user_name}</span>
+                <span>{l.loan.user_id === me?.id ? t.common.you : l.user_name}</span>
                 {(l.loan.project_id || l.loan.department_id) && (
                   <span>{forLabel(meta, l.loan.project_id, l.loan.department_id)}</span>
                 )}
                 <span>{when(l.loan.taken_at)}</span>
               </div>
             </div>
-            {l.overdue && <span className="badge badge-danger">Overdue</span>}
+            {l.overdue && <span className="badge badge-danger">{t.common.overdue}</span>}
           </Link>
         ))}
       </div>
@@ -100,29 +102,27 @@ export function LoansPage() {
 
   return (
     <Page
-      title="Loans"
-      subtitle={
-        loans.data && (all.length ? `${all.length} tools borrowed right now` : "Every tool is in its place")
-      }
+      title={t.loans.title}
+      subtitle={loans.data && (all.length ? t.loans.subtitle(all.length) : t.loans.allHome)}
     >
       <ErrorBox error={loans.error} />
       {loans.isPending ? (
         <Loading />
       ) : all.length === 0 ? (
         <Card>
-          <Empty icon={<Wrench size={20} />} title="Nothing on loan">
-            When someone borrows a tool, it shows up here.
+          <Empty icon={<Wrench size={20} />} title={t.loans.nothing}>
+            {t.loans.nothingHint}
           </Empty>
         </Card>
       ) : (
         <div className="stack" style={{ gap: "1.25rem" }}>
           {overdue.length > 0 && (
-            <Card title={<span className="text-danger">Overdue</span>} count={overdue.length}>
+            <Card title={<span className="text-danger">{t.common.overdue}</span>} count={overdue.length}>
               {table(overdue)}
             </Card>
           )}
           {rest.length > 0 && (
-            <Card title="Borrowed" count={rest.length}>
+            <Card title={t.loans.borrowed} count={rest.length}>
               {table(rest)}
             </Card>
           )}

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  ApiError,
   type AssetStatus,
   get,
   type ItemKind,
@@ -10,6 +11,8 @@ import {
   type Stock,
   type User,
 } from "./api";
+import { dict } from "./i18n";
+import { serverText } from "./i18n/server";
 
 export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => get<User>("/api/me"), retry: false });
 
@@ -40,25 +43,17 @@ export function isLow(it: ItemSummary): boolean {
 }
 
 export function greeting(name: string): string {
+  const g = dict().greeting;
   const h = new Date().getHours();
-  const part = h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 19 ? "Good afternoon" : "Good evening";
+  const part = h < 5 ? g.evening : h < 12 ? g.morning : h < 19 ? g.afternoon : g.evening;
   return `${part}, ${name.split(" ")[0]}`;
 }
 
-export const kindLabel: Record<ItemKind, string> = {
-  consumable: "Consumable",
-  tool: "Tool / equipment",
-  hazmat: "Hazardous",
-  flight_hw: "Flight hardware",
-};
+export const itemKinds: ItemKind[] = ["consumable", "tool", "hazmat", "flight_hw"];
 
-export const statusLabel: Record<AssetStatus, string> = {
-  available: "Available",
-  on_loan: "On loan",
-  broken: "Broken",
-  in_repair: "In repair",
-  retired: "Retired",
-};
+export const kindLabel = (k: ItemKind): string => dict().kind[k];
+
+export const statusLabel = (s: AssetStatus): string => dict().status[s];
 
 export const code = {
   location: (id: number) => `L${id}`,
@@ -74,7 +69,7 @@ export function qty(n: number, unit = ""): string {
 
 /** A stock lot's quantity: "12 m", "≈10", or "Lots" when nobody counted. */
 export function stockQty(s: Pick<Stock, "quantity" | "count_state">, unit = ""): string {
-  if (s.count_state === "uncounted") return "Lots";
+  if (s.count_state === "uncounted") return dict().common.lots;
   return (s.count_state === "approx" ? "≈" : "") + qty(s.quantity, unit);
 }
 
@@ -84,7 +79,8 @@ export function itemTotal(
 ) {
   const counted = (it.approx_lots > 0 ? "≈" : "") + qty(it.total_quantity, it.unit);
   if (it.uncounted_lots === 0) return counted;
-  return it.total_quantity > 0 ? `${counted} + lots` : "Lots";
+  const c = dict().common;
+  return it.total_quantity > 0 ? `${counted} ${c.plusLots}` : c.lots;
 }
 
 /** "Resistor 10k · 0603" */
@@ -92,24 +88,28 @@ export function itemTitle(it: { name: string; package: string }): string {
   return it.package ? `${it.name} · ${it.package}` : it.name;
 }
 
+/** A calendar date ("2026-12-31") in the chosen language, e.g. "31 Dec 2026". */
 export function day(iso: string | null | undefined): string {
   if (!iso) return "";
-  return iso.slice(0, 10);
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return d.toLocaleDateString(dict().locale, { dateStyle: "medium", timeZone: "UTC" });
 }
 
 export function when(iso: string | null | undefined): string {
   if (!iso) return "";
+  const t = dict();
   const d = new Date(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff >= 0 && diff < 60) return "just now";
-  if (diff >= 0 && diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff >= 0 && diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
-  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  if (diff >= 0 && diff < 60) return t.time.justNow;
+  if (diff >= 0 && diff < 3600) return t.time.minAgo(Math.floor(diff / 60));
+  if (diff >= 0 && diff < 86400) return t.time.hAgo(Math.floor(diff / 3600));
+  return d.toLocaleString(t.locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** "INVICTUS · Propulsion", "ICARUS", or "Team". */
 export function ownerLabel(meta: Meta | undefined, o: Owned): string {
-  return forLabel(meta, o.owner_project_id, o.owner_department_id) || "Team";
+  return forLabel(meta, o.owner_project_id, o.owner_department_id) || dict().common.team;
 }
 
 export function forLabel(
@@ -169,6 +169,7 @@ export function savePurpose(p: PurposeChoice) {
   }
 }
 
+/** An error for the UI; server messages are translated when known. */
 export function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return e instanceof ApiError ? serverText(e.message) : e instanceof Error ? e.message : String(e);
 }

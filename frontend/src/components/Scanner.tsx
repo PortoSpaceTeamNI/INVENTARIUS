@@ -1,6 +1,7 @@
 import { BarcodeDetector, prepareZXingModule } from "barcode-detector/ponyfill";
 import { useEffect, useRef, useState } from "react";
 import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
+import { useT } from "../i18n";
 
 // Serve the decoder ourselves instead of from a CDN: the room's internet
 // connection is not always there.
@@ -15,7 +16,8 @@ const FORMATS = ["data_matrix", "qr_code", "code_128"] as const;
 /** Live camera view that calls onCode with each decoded label. */
 export function Scanner({ onCode, paused }: { onCode: (text: string) => void; paused?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<"noCamera" | "denied" | "failed" | null>(null);
+  const t = useT();
   const [torch, setTorch] = useState<MediaStreamTrack | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const onCodeRef = useRef(onCode);
@@ -31,7 +33,7 @@ export function Scanner({ onCode, paused }: { onCode: (text: string) => void; pa
 
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("This browser cannot use the camera here. The page must be opened over https.");
+        setError("noCamera");
         return;
       }
       try {
@@ -40,11 +42,7 @@ export function Scanner({ onCode, paused }: { onCode: (text: string) => void; pa
           audio: false,
         });
       } catch (e) {
-        setError(
-          e instanceof DOMException && e.name === "NotAllowedError"
-            ? "Camera permission was denied. Allow it in the browser settings."
-            : "Could not open the camera.",
-        );
+        setError(e instanceof DOMException && e.name === "NotAllowedError" ? "denied" : "failed");
         return;
       }
       if (stopped || !video.current) {
@@ -100,17 +98,17 @@ export function Scanner({ onCode, paused }: { onCode: (text: string) => void; pa
   if (error)
     return (
       <div className="alert alert-danger" role="alert">
-        {error}
+        {t.scanner[error]}
       </div>
     );
   return (
     <div className="scanner">
       <video ref={video} playsInline muted />
       <div className="scanner-aim" />
-      <div className="scanner-hint">Data Matrix, QR or barcode</div>
+      <div className="scanner-hint">{t.scanner.hint}</div>
       {torch && (
         <button type="button" className="btn btn-sm scanner-torch" onClick={toggleTorch}>
-          {torchOn ? "Light off" : "Light on"}
+          {torchOn ? t.scanner.lightOff : t.scanner.lightOn}
         </button>
       )}
     </div>
