@@ -11,6 +11,55 @@ import (
 	"time"
 )
 
+const addTapeUsed = `-- name: AddTapeUsed :exec
+UPDATE tape_rolls SET used_dots = used_dots + ?1 WHERE id = ?2
+`
+
+type AddTapeUsedParams struct {
+	Dots int64 `json:"dots"`
+	ID   int64 `json:"id"`
+}
+
+func (q *Queries) AddTapeUsed(ctx context.Context, arg AddTapeUsedParams) error {
+	_, err := q.db.ExecContext(ctx, addTapeUsed, arg.Dots, arg.ID)
+	return err
+}
+
+const cancelAllPrintJobs = `-- name: CancelAllPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = '' WHERE status IN ('queued', 'failed')
+`
+
+func (q *Queries) CancelAllPrintJobs(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelAllPrintJobs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const cancelPrintJobs = `-- name: CancelPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = ''
+WHERE status IN ('queued', 'failed') AND id IN (/*SLICE:ids*/?)
+`
+
+func (q *Queries) CancelPrintJobs(ctx context.Context, ids []int64) (int64, error) {
+	query := cancelPrintJobs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const changePrintJobStatus = `-- name: ChangePrintJobStatus :execrows
 UPDATE print_jobs SET status = ?1, error = ''
 WHERE id = ?2 AND status IN (/*SLICE:from_status*/?)
@@ -91,6 +140,28 @@ func (q *Queries) CountLocationUsage(ctx context.Context, id *int64) (int64, err
 	return column_1, err
 }
 
+const countQueuedPrintJobs = `-- name: CountQueuedPrintJobs :one
+SELECT count(*) FROM print_jobs WHERE status = 'queued'
+`
+
+func (q *Queries) CountQueuedPrintJobs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countQueuedPrintJobs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTapeRolls = `-- name: CountTapeRolls :one
+SELECT count(*) FROM tape_rolls
+`
+
+func (q *Queries) CountTapeRolls(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTapeRolls)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAsset = `-- name: CreateAsset :one
 INSERT INTO assets (item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, item_id, serial, location_id, condition, status, notes, owner_project_id, owner_department_id, created_at, updated_at, version
@@ -162,7 +233,7 @@ INSERT INTO items (
     name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url,
     unit, min_stock, hazard_class, storage_notes, owner_project_id, owner_department_id, package,
     label_text
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, label_text, version
 `
 
 type CreateItemParams struct {
@@ -224,8 +295,8 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
-		&i.Version,
 		&i.LabelText,
+		&i.Version,
 	)
 	return i, err
 }
@@ -411,6 +482,30 @@ func (q *Queries) CreateStock(ctx context.Context, arg CreateStockParams) (Stock
 	return i, err
 }
 
+const createTapeRoll = `-- name: CreateTapeRoll :one
+INSERT INTO tape_rolls (width_mm, length_mm, used_dots) VALUES (?, ?, ?) RETURNING id, width_mm, length_mm, used_dots, loaded_at, replaced_at
+`
+
+type CreateTapeRollParams struct {
+	WidthMm  int64 `json:"width_mm"`
+	LengthMm int64 `json:"length_mm"`
+	UsedDots int64 `json:"used_dots"`
+}
+
+func (q *Queries) CreateTapeRoll(ctx context.Context, arg CreateTapeRollParams) (TapeRoll, error) {
+	row := q.db.QueryRowContext(ctx, createTapeRoll, arg.WidthMm, arg.LengthMm, arg.UsedDots)
+	var i TapeRoll
+	err := row.Scan(
+		&i.ID,
+		&i.WidthMm,
+		&i.LengthMm,
+		&i.UsedDots,
+		&i.LoadedAt,
+		&i.ReplacedAt,
+	)
+	return i, err
+}
+
 const deleteAsset = `-- name: DeleteAsset :exec
 DELETE FROM assets WHERE id = ?
 `
@@ -481,7 +576,7 @@ func (q *Queries) FindCategoryByName(ctx context.Context, arg FindCategoryByName
 }
 
 const findItemByMPN = `-- name: FindItemByMPN :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text FROM items WHERE mpn = ? AND mpn != '' LIMIT 1
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, label_text, version FROM items WHERE mpn = ? AND mpn != '' LIMIT 1
 `
 
 func (q *Queries) FindItemByMPN(ctx context.Context, mpn string) (Item, error) {
@@ -507,14 +602,14 @@ func (q *Queries) FindItemByMPN(ctx context.Context, mpn string) (Item, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
-		&i.Version,
 		&i.LabelText,
+		&i.Version,
 	)
 	return i, err
 }
 
 const findItemByName = `-- name: FindItemByName :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? COLLATE NOCASE ORDER BY id LIMIT 1
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, label_text, version FROM items WHERE name = ? COLLATE NOCASE AND kind = ? AND package = ? COLLATE NOCASE ORDER BY id LIMIT 1
 `
 
 type FindItemByNameParams struct {
@@ -546,8 +641,8 @@ func (q *Queries) FindItemByName(ctx context.Context, arg FindItemByNameParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
-		&i.Version,
 		&i.LabelText,
+		&i.Version,
 	)
 	return i, err
 }
@@ -666,8 +761,26 @@ func (q *Queries) GetCategory(ctx context.Context, id int64) (Category, error) {
 	return i, err
 }
 
+const getCurrentTapeRoll = `-- name: GetCurrentTapeRoll :one
+SELECT id, width_mm, length_mm, used_dots, loaded_at, replaced_at FROM tape_rolls WHERE width_mm = ? AND replaced_at IS NULL ORDER BY id DESC LIMIT 1
+`
+
+func (q *Queries) GetCurrentTapeRoll(ctx context.Context, widthMm int64) (TapeRoll, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentTapeRoll, widthMm)
+	var i TapeRoll
+	err := row.Scan(
+		&i.ID,
+		&i.WidthMm,
+		&i.LengthMm,
+		&i.UsedDots,
+		&i.LoadedAt,
+		&i.ReplacedAt,
+	)
+	return i, err
+}
+
 const getItem = `-- name: GetItem :one
-SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text FROM items WHERE id = ?
+SELECT id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, label_text, version FROM items WHERE id = ?
 `
 
 func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
@@ -693,8 +806,8 @@ func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
-		&i.Version,
 		&i.LabelText,
+		&i.Version,
 	)
 	return i, err
 }
@@ -758,6 +871,17 @@ func (q *Queries) GetPrintJob(ctx context.Context, id int64) (PrintJob, error) {
 		&i.PrintedAt,
 	)
 	return i, err
+}
+
+const getSetting = `-- name: GetSetting :one
+SELECT value FROM settings WHERE key = ?
+`
+
+func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSetting, key)
+	var value string
+	err := row.Scan(&value)
+	return value, err
 }
 
 const getStock = `-- name: GetStock :one
@@ -912,8 +1036,80 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 	return items, nil
 }
 
+const listCategoryCounts = `-- name: ListCategoryCounts :many
+SELECT categories.id,
+    CAST((SELECT count(*) FROM items i WHERE i.category_id = categories.id) AS INTEGER) AS item_count
+FROM categories
+`
+
+type ListCategoryCountsRow struct {
+	ID        int64 `json:"id"`
+	ItemCount int64 `json:"item_count"`
+}
+
+func (q *Queries) ListCategoryCounts(ctx context.Context) ([]ListCategoryCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listCategoryCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCategoryCountsRow
+	for rows.Next() {
+		var i ListCategoryCountsRow
+		if err := rows.Scan(&i.ID, &i.ItemCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDonePrintJobs = `-- name: ListDonePrintJobs :many
+SELECT id, created_at, user_id, code, symbology, caption, status, attempts, error, printed_at FROM print_jobs WHERE status = 'done' ORDER BY printed_at, id
+`
+
+func (q *Queries) ListDonePrintJobs(ctx context.Context) ([]PrintJob, error) {
+	rows, err := q.db.QueryContext(ctx, listDonePrintJobs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrintJob
+	for rows.Next() {
+		var i PrintJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.Code,
+			&i.Symbology,
+			&i.Caption,
+			&i.Status,
+			&i.Attempts,
+			&i.Error,
+			&i.PrintedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listItemSummaries = `-- name: ListItemSummaries :many
-SELECT items.id, items.name, items.kind, items.category_id, items.description, items.manufacturer, items.mpn, items.supplier_url, items.datasheet_url, items.unit, items.min_stock, items.photo, items.hazard_class, items.storage_notes, items.owner_project_id, items.owner_department_id, items.created_at, items.updated_at, items.package, items.version, items.label_text,
+SELECT items.id, items.name, items.kind, items.category_id, items.description, items.manufacturer, items.mpn, items.supplier_url, items.datasheet_url, items.unit, items.min_stock, items.photo, items.hazard_class, items.storage_notes, items.owner_project_id, items.owner_department_id, items.created_at, items.updated_at, items.package, items.label_text, items.version,
     CAST(COALESCE((SELECT sum(s.quantity) FROM stock s
         WHERE s.item_id = items.id AND s.count_state != 'uncounted'), 0) AS REAL) AS total_quantity,
     CAST((SELECT count(*) FROM stock s WHERE s.item_id = items.id AND s.count_state = 'uncounted') AS INTEGER) AS uncounted_lots,
@@ -963,8 +1159,8 @@ type ListItemSummariesRow struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	Package           string    `json:"package"`
-	Version           int64     `json:"version"`
 	LabelText         string    `json:"label_text"`
+	Version           int64     `json:"version"`
 	TotalQuantity     float64   `json:"total_quantity"`
 	UncountedLots     int64     `json:"uncounted_lots"`
 	ApproxLots        int64     `json:"approx_lots"`
@@ -1008,8 +1204,8 @@ func (q *Queries) ListItemSummaries(ctx context.Context, arg ListItemSummariesPa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Package,
-			&i.Version,
 			&i.LabelText,
+			&i.Version,
 			&i.TotalQuantity,
 			&i.UncountedLots,
 			&i.ApproxLots,
@@ -1461,6 +1657,54 @@ func (q *Queries) ListStockByLocation(ctx context.Context, locationID int64) ([]
 	return items, nil
 }
 
+const listWaitingPrintJobs = `-- name: ListWaitingPrintJobs :many
+SELECT id, created_at, user_id, code, symbology, caption, status, attempts, error, printed_at FROM print_jobs WHERE status IN ('queued', 'printing', 'failed') ORDER BY id
+`
+
+// The queue: labels not printed yet, and failed ones that need a decision.
+func (q *Queries) ListWaitingPrintJobs(ctx context.Context) ([]PrintJob, error) {
+	rows, err := q.db.QueryContext(ctx, listWaitingPrintJobs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrintJob
+	for rows.Next() {
+		var i PrintJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.Code,
+			&i.Symbology,
+			&i.Caption,
+			&i.Status,
+			&i.Attempts,
+			&i.Error,
+			&i.PrintedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const replaceTapeRolls = `-- name: ReplaceTapeRolls :exec
+UPDATE tape_rolls SET replaced_at = CURRENT_TIMESTAMP WHERE width_mm = ? AND replaced_at IS NULL
+`
+
+func (q *Queries) ReplaceTapeRolls(ctx context.Context, widthMm int64) error {
+	_, err := q.db.ExecContext(ctx, replaceTapeRolls, widthMm)
+	return err
+}
+
 const requeueInterruptedPrintJobs = `-- name: RequeueInterruptedPrintJobs :exec
 UPDATE print_jobs SET status = 'queued' WHERE status = 'printing'
 `
@@ -1522,6 +1766,21 @@ func (q *Queries) SetPrintJobStatus(ctx context.Context, arg SetPrintJobStatusPa
 		arg.AttemptInc,
 		arg.ID,
 	)
+	return err
+}
+
+const setSetting = `-- name: SetSetting :exec
+INSERT INTO settings (key, value) VALUES (?, ?)
+ON CONFLICT (key) DO UPDATE SET value = excluded.value
+`
+
+type SetSettingParams struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (q *Queries) SetSetting(ctx context.Context, arg SetSettingParams) error {
+	_, err := q.db.ExecContext(ctx, setSetting, arg.Key, arg.Value)
 	return err
 }
 
@@ -1642,7 +1901,7 @@ UPDATE items SET
     supplier_url = ?, datasheet_url = ?, unit = ?, min_stock = ?, hazard_class = ?,
     storage_notes = ?, owner_project_id = ?, owner_department_id = ?, package = ?,
     label_text = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
-WHERE id = ? RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, version, label_text
+WHERE id = ? RETURNING id, name, kind, category_id, description, manufacturer, mpn, supplier_url, datasheet_url, unit, min_stock, photo, hazard_class, storage_notes, owner_project_id, owner_department_id, created_at, updated_at, package, label_text, version
 `
 
 type UpdateItemParams struct {
@@ -1706,8 +1965,8 @@ func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) (Item, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Package,
-		&i.Version,
 		&i.LabelText,
+		&i.Version,
 	)
 	return i, err
 }

@@ -45,7 +45,20 @@ cutter sits away from the print head. The queue therefore waits a few seconds
 (`INVENTARIUS_PRINT_BATCH_DELAY`) and prints everything pending as **one job**. Labels in a
 job are half-cut, so they come out as a strip that is easy to peel, with one full cut at the
 end. To label a whole shelf at once, use *Labels → Print several labels* with a range like
-`L4-L20`.
+`L4-L20`, or *Print labels…* in a place's menu to tick the place, the places inside it and
+its parts and units.
+
+Labels made a minute apart still print one by one, each wasting the lead-in. When labelling a
+lot, turn on **Hold labels** on the Labels page: every label waits (the Labels menu entry shows
+how many) until you press *Print now*, and they all come out as one strip. Several earlier
+labels can also be ticked in *Recent print jobs* and reprinted together.
+
+**Tape left:** the printer cannot report how much tape a TZe cassette has left, so the app
+estimates it. It adds up the tape every job uses (lead-in, labels, margins) and shows what is
+left on the **Labels** page. Each width (12 or 24 mm) has its own count, so cassettes can be
+swapped. When you put in a **new** cassette, press *New tape loaded* and choose its length
+(standard TZe: 8 m). Labels printed from the printer's own keyboard are not counted. The
+first cassette counted also includes every label the app printed before this existed.
 
 ## First print checklist
 

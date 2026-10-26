@@ -56,8 +56,8 @@ type Item struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	Package           string    `json:"package"`
-	Version           int64     `json:"version"`
 	LabelText         string    `json:"label_text"`
+	Version           int64     `json:"version"`
 }
 
 type Loan struct {
@@ -139,6 +139,11 @@ type Session struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+type Setting struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type Stock struct {
 	ID                int64      `json:"id"`
 	ItemID            int64      `json:"item_id"`
@@ -152,6 +157,15 @@ type Stock struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 	CountState        string     `json:"count_state"`
 	Version           int64      `json:"version"`
+}
+
+type TapeRoll struct {
+	ID         int64      `json:"id"`
+	WidthMm    int64      `json:"width_mm"`
+	LengthMm   int64      `json:"length_mm"`
+	UsedDots   int64      `json:"used_dots"`
+	LoadedAt   time.Time  `json:"loaded_at"`
+	ReplacedAt *time.Time `json:"replaced_at"`
 }
 
 type User struct {

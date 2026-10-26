@@ -12,6 +12,7 @@ import (
 	"inventarius/internal/codes"
 	"inventarius/internal/db"
 	"inventarius/internal/labels"
+	"inventarius/internal/printqueue"
 )
 
 // RenderJob turns a stored print job into a label image for the loaded
@@ -99,7 +100,9 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 		Labels []struct {
 			Code      string `json:"code"`
 			Symbology string `json:"symbology"`
-			Caption   string `json:"caption"`
+			// Caption left out: the usual one (a place's name, an item's
+			// label text); "" prints the code alone.
+			Caption *string `json:"caption"`
 		} `json:"labels"`
 	}
 	if err := decode(r, &b); err != nil {
@@ -126,8 +129,14 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 		if _, err := labels.ParseSymbology(l.Symbology); err != nil {
 			return badRequest(err.Error())
 		}
+		var caption string
+		if l.Caption != nil {
+			caption = strings.TrimSpace(*l.Caption)
+		} else {
+			caption = s.usualCaption(r.Context(), k, id)
+		}
 		jobs = append(jobs, db.CreatePrintJobParams{
-			Code: codes.Format(k, id), Symbology: l.Symbology, Caption: strings.TrimSpace(l.Caption),
+			Code: codes.Format(k, id), Symbology: l.Symbology, Caption: caption,
 		})
 	}
 	out, err := s.queue.Enqueue(r.Context(), u.ID, jobs)
@@ -137,12 +146,90 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 	return writeJSON(w, out)
 }
 
+// usualCaption is the caption a label gets when printed without choosing
+// one, as when it is printed on creation.
+func (s *Server) usualCaption(ctx context.Context, k codes.Kind, id int64) string {
+	switch k {
+	case codes.Location:
+		if l, err := s.store.GetLocation(ctx, id); err == nil {
+			return s.defaultCaption(k, l.Name)
+		}
+	case codes.Item:
+		if it, err := s.store.GetItem(ctx, id); err == nil {
+			return s.defaultCaption(k, it.LabelText)
+		}
+	}
+	return ""
+}
+
+func (s *Server) printHold(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	if r.Method == http.MethodPut {
+		var b struct {
+			Hold bool `json:"hold"`
+		}
+		if err := decode(r, &b); err != nil {
+			return err
+		}
+		if err := s.queue.SetHold(r.Context(), b.Hold); err != nil {
+			return err
+		}
+	}
+	held, err := s.queue.Held(r.Context())
+	if err != nil {
+		return err
+	}
+	waiting, err := s.store.CountQueuedPrintJobs(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, map[string]any{"hold": held, "waiting": waiting})
+}
+
+// flushPrints prints every waiting label now, as one strip.
+func (s *Server) flushPrints(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	s.queue.Flush()
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *Server) listPrintJobs(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	jobs, err := s.store.ListPrintJobs(r.Context(), limit(r, 100, 500))
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, nonNil(jobs))
+}
+
+// printQueue answers GET /api/print/queue: every label still waiting,
+// oldest first.
+func (s *Server) printQueue(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	jobs, err := s.store.ListWaitingPrintJobs(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, nonNil(jobs))
+}
+
+// cancelPrints answers POST /api/print/cancel: cancels the waiting or failed
+// jobs in ids, or all of them when ids is left out.
+func (s *Server) cancelPrints(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	var b struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := decode(r, &b); err != nil {
+		return err
+	}
+	var n int64
+	var err error
+	if b.IDs == nil {
+		n, err = s.store.CancelAllPrintJobs(r.Context())
+	} else if len(b.IDs) > 0 {
+		n, err = s.store.CancelPrintJobs(r.Context(), b.IDs)
+	}
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, map[string]int64{"cancelled": n})
 }
 
 func (s *Server) printJobOp(w http.ResponseWriter, r *http.Request, u *auth.User) error {
@@ -184,5 +271,37 @@ func (s *Server) printJobOp(w http.ResponseWriter, r *http.Request, u *auth.User
 }
 
 func (s *Server) printerStatus(w http.ResponseWriter, r *http.Request, u *auth.User) error {
-	return writeJSON(w, s.queue.CheckStatus(r.Context()))
+	st := s.queue.CheckStatus(r.Context())
+	roll, err := s.queue.Roll(r.Context(), st.TapeMM)
+	if err != nil {
+		return err
+	}
+	st.TapeRoll = roll
+	return writeJSON(w, st)
+}
+
+// newTapeRoll records that a new cassette was put in the printer, so the
+// tape left is counted from its full length again.
+func (s *Server) newTapeRoll(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	var b struct {
+		LengthMM int `json:"length_mm"`
+	}
+	if err := decode(r, &b); err != nil {
+		return err
+	}
+	if b.LengthMM == 0 {
+		b.LengthMM = printqueue.DefaultRollMM
+	}
+	if b.LengthMM < 500 || b.LengthMM > 50000 {
+		return badRequest("tape length must be between 0.5 and 50 m")
+	}
+	width := s.queue.CheckStatus(r.Context()).TapeMM
+	if _, err := labels.TapeFor(width); err != nil {
+		return badRequest("load 12 or 24 mm tape in the printer first")
+	}
+	roll, err := s.queue.NewRoll(r.Context(), width, b.LengthMM)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, roll)
 }

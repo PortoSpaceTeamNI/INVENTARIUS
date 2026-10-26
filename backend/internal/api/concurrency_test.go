@@ -48,8 +48,8 @@ func TestNoDuplicateNames(t *testing.T) {
 	ana.do("POST", "/api/locations", map[string]any{"name": "Shelf 2", "parent_id": room.ID}, 200, &other)
 	ana.do("PATCH", fmt.Sprintf("/api/locations/%d", other.ID), map[string]any{"name": "Shelf 1", "parent_id": room.ID}, 400, nil)
 
-	ana.do("POST", "/api/categories", map[string]any{"name": "Tools"}, 200, nil)
-	ana.do("POST", "/api/categories", map[string]any{"name": "TOOLS"}, 400, nil)
+	ana.do("POST", "/api/categories", map[string]any{"name": "Spares"}, 200, nil)
+	ana.do("POST", "/api/categories", map[string]any{"name": "SPARES"}, 400, nil)
 
 	ana.do("POST", "/api/items", map[string]any{"name": "Resistor 10k", "kind": "consumable", "package": "0603"}, 200, nil)
 	ana.do("POST", "/api/items", map[string]any{"name": "resistor 10k", "kind": "consumable", "package": "0603"}, 400, nil)
