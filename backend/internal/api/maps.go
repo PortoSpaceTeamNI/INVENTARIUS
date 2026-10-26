@@ -1,14 +1,19 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"inventarius/internal/auth"
+	"inventarius/internal/codes"
 	"inventarius/internal/db"
 	"inventarius/internal/inventory"
 )
@@ -16,18 +21,71 @@ import (
 // ---- room maps ----
 
 // mapShape is one rectangle on a room map, in centimetres from the room's
-// top-left corner. A shape linked to a location stands for it: clicking it
-// shows what is stored there.
+// top-left corner. A shape can stand for something in the inventory, named
+// by its label code (L12 a place, I5 an item, S40 a stock lot, A7 a unit) or
+// C3 for a category; clicking it shows that thing.
 type mapShape struct {
-	ID         string  `json:"id"`
-	Label      string  `json:"label"`
-	Kind       string  `json:"kind"` // storage, furniture or fixture
-	Color      string  `json:"color"`
-	X          float64 `json:"x"`
-	Y          float64 `json:"y"`
-	W          float64 `json:"w"`
-	H          float64 `json:"h"`
-	LocationID *int64  `json:"location_id"`
+	ID    string  `json:"id"`
+	Label string  `json:"label"`
+	Kind  string  `json:"kind"` // storage, furniture or fixture
+	Color string  `json:"color"`
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	W     float64 `json:"w"`
+	H     float64 `json:"h"`
+	Link  string  `json:"link"` // "" when it stands for nothing
+
+	// Maps saved before links could be anything stored only a location.
+	// It is read into Link and never written.
+	LegacyLocationID *int64 `json:"location_id,omitempty"`
+}
+
+// upgrade moves a legacy location_id into Link.
+func (s *mapShape) upgrade() {
+	if s.LegacyLocationID != nil {
+		if s.Link == "" {
+			s.Link = codes.Format(codes.Location, *s.LegacyLocationID)
+		}
+		s.LegacyLocationID = nil
+	}
+}
+
+// parseLink splits a shape link into its kind ('L', 'I', 'S', 'A' or 'C')
+// and id, normalised to upper case.
+func parseLink(link string) (byte, int64, error) {
+	if c, ok := strings.CutPrefix(strings.ToUpper(strings.TrimSpace(link)), "C"); ok {
+		id, err := strconv.ParseInt(c, 10, 64)
+		if err != nil || id <= 0 || c[0] == '0' {
+			return 0, 0, fmt.Errorf("invalid link %q", link)
+		}
+		return 'C', id, nil
+	}
+	k, id, err := codes.Parse(link)
+	if err != nil || strings.Contains(link, "/") {
+		return 0, 0, fmt.Errorf("invalid link %q", link)
+	}
+	return byte(k), id, nil
+}
+
+// linkExists reports whether the thing a link names is in the database.
+func (s *Server) linkExists(ctx context.Context, kind byte, id int64) (bool, error) {
+	var err error
+	switch kind {
+	case 'L':
+		_, err = s.store.GetLocation(ctx, id)
+	case 'I':
+		_, err = s.store.GetItem(ctx, id)
+	case 'S':
+		_, err = s.store.GetStock(ctx, id)
+	case 'A':
+		_, err = s.store.GetAsset(ctx, id)
+	case 'C':
+		_, err = s.store.GetCategory(ctx, id)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // roomMap is a db.RoomMap with its shapes decoded.
@@ -49,6 +107,9 @@ func toRoomMap(m db.RoomMap) (roomMap, error) {
 	}
 	if err := json.Unmarshal([]byte(m.Shapes), &out.Shapes); err != nil {
 		return out, fmt.Errorf("map %d shapes: %w", m.ID, err)
+	}
+	for i := range out.Shapes {
+		out.Shapes[i].upgrade()
 	}
 	return out, nil
 }
@@ -72,8 +133,9 @@ const (
 	maxMapShapes = 500
 )
 
-// validate checks the map and its shapes; locations are the known location IDs.
-func (b *mapBody) validate(locations map[int64]bool) error {
+// validate checks the map and its shapes; locations are the known location
+// IDs and exists says whether a shape's link names something real.
+func (b *mapBody) validate(locations map[int64]bool, exists func(kind byte, id int64) (bool, error)) error {
 	b.Name = strings.TrimSpace(b.Name)
 	if b.Name == "" {
 		return badRequest("name is required")
@@ -112,9 +174,27 @@ func (b *mapBody) validate(locations map[int64]bool) error {
 		if !(s.W > 0 && s.H > 0 && s.X >= -eps && s.Y >= -eps && s.X+s.W <= b.Width+eps && s.Y+s.H <= b.Height+eps) {
 			return badRequest("shapes must lie inside the room")
 		}
-		if s.LocationID != nil && !locations[*s.LocationID] {
-			return badRequest("unknown location")
+		s.upgrade()
+		if s.Link == "" {
+			continue
 		}
+		kind, id, err := parseLink(s.Link)
+		if err != nil {
+			return badRequest("links must be a code like L12, I5, S40, A7 or C3")
+		}
+		if kind == 'L' && !locations[id] {
+			return badRequest("the linked thing does not exist")
+		}
+		if kind != 'L' {
+			ok, err := exists(kind, id)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return badRequest("the linked thing does not exist")
+			}
+		}
+		s.Link = fmt.Sprintf("%c%d", kind, id)
 	}
 	return nil
 }
@@ -172,7 +252,8 @@ func (s *Server) decodeMap(r *http.Request) (mapBody, string, error) {
 	if err != nil {
 		return b, "", err
 	}
-	if err := b.validate(locs); err != nil {
+	exists := func(kind byte, id int64) (bool, error) { return s.linkExists(r.Context(), kind, id) }
+	if err := b.validate(locs, exists); err != nil {
 		return b, "", err
 	}
 	shapes, err := json.Marshal(b.Shapes)

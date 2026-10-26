@@ -89,7 +89,7 @@ export function RoomCanvas(props: {
       )}
       <rect x={0} y={0} width={width} height={height} className="room-wall" pointerEvents="none" />
       {ordered.map((s) => {
-        const clickable = props.editing || s.location_id != null;
+        const clickable = props.editing || s.link !== "";
         const on = highlighted?.has(s.id);
         const count = props.counts?.get(s.id) ?? 0;
         const cls = [

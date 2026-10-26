@@ -336,8 +336,12 @@ export interface MapShape {
   y: number;
   w: number;
   h: number;
-  /** The place this shape stands for; clicking it shows what is there. */
-  location_id: number | null;
+  /**
+   * What the shape stands for, as a label code: L12 a place, I5 an item,
+   * S40 a stock lot, A7 a unit, C3 a category; "" for nothing. Tapping it
+   * shows that thing.
+   */
+  link: string;
 }
 
 /** Floor plan of a room, width × height cm (GET /api/maps). */

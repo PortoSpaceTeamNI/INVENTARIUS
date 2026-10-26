@@ -45,7 +45,7 @@ import {
   useMe,
   useMeta,
 } from "../lib";
-import { itemPlaces, shapesHolding, useMaps } from "../map";
+import { shapesForItem, useMaps } from "../map";
 import { categoryPaths } from "./ItemsPage";
 
 const statusBadge: Record<string, string> = {
@@ -96,7 +96,7 @@ export function ItemPage() {
   });
   const low = !units && uncountedLots === 0 && item.min_stock != null && total < item.min_stock;
   const live = assets.filter((a) => a.status !== "retired");
-  const onMap = maps?.find((m) => shapesHolding(m.shapes, locs, itemPlaces(q.data)).size > 0);
+  const onMap = maps?.find((m) => shapesForItem(m.shapes, locs, cats.data, q.data).size > 0);
 
   async function uploadPhoto(file: File) {
     try {

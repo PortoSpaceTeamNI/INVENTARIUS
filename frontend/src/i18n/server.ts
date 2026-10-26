@@ -47,6 +47,9 @@ const exact: Record<string, string> = {
     "O tipo da forma tem de ser storage, furniture ou fixture.",
   "colours must look like #2563eb": "As cores têm de ser como #2563eb.",
   "shapes must lie inside the room": "As formas têm de ficar dentro da sala.",
+  "links must be a code like L12, I5, S40, A7 or C3":
+    "As ligações têm de ser um código como L12, I5, S40, A7 ou C3.",
+  "the linked thing does not exist": "O que está ligado já não existe.",
   "a category cannot be inside itself": "Uma categoria não pode estar dentro de si própria.",
   // auth
   "This account has been disabled.": "Esta conta foi desativada.",

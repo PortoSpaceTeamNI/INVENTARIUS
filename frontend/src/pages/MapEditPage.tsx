@@ -3,6 +3,7 @@ import { Copy, MapPin, MoreHorizontal, Plus, Save, Trash2 } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, get, type Location, type MapShape, type RoomMap, type ShapeKind } from "../api";
+import { LinkPicker } from "../components/LinkPicker";
 import { LocationSelect } from "../components/pickers";
 import { RoomCanvas } from "../components/RoomCanvas";
 import { Card, ErrorBox, Loading, Menu, Page, useToast } from "../components/ui";
@@ -67,7 +68,7 @@ function Editor(props: { initial: RoomMap }) {
   }
   function addShape(kind: ShapeKind, from?: MapShape) {
     const base: MapShape = from
-      ? { ...from, x: from.x + 20, y: from.y + 20, location_id: null }
+      ? { ...from, x: from.x + 20, y: from.y + 20, link: "" }
       : {
           id: "",
           label: t.map.newLabel[kind],
@@ -77,7 +78,7 @@ function Editor(props: { initial: RoomMap }) {
           y: snap(map.height / 2 - 30),
           w: 80,
           h: kind === "fixture" ? 10 : 60,
-          location_id: null,
+          link: "",
         };
     const s = clampShape({ ...base, id: newShapeId(map.shapes) }, map.width, map.height);
     change({ ...map, shapes: [...map.shapes, s] });
@@ -193,7 +194,7 @@ function Editor(props: { initial: RoomMap }) {
         parent_id: target === "shape" ? map.location_id : null,
       });
       qc.invalidateQueries({ queryKey: ["locations"] });
-      if (target === "shape" && shape) updateShape(shape.id, { location_id: loc.id });
+      if (target === "shape" && shape) updateShape(shape.id, { link: `L${loc.id}` });
       else change({ ...map, location_id: loc.id });
       toast(t.map.placeCreated(loc.name));
     } catch (err) {
@@ -321,15 +322,12 @@ function Editor(props: { initial: RoomMap }) {
                   />
                 </label>
               </div>
-              <label className="field">
-                <span>{t.map.place}</span>
-                <LocationSelect
-                  value={shape.location_id}
-                  onChange={(v) => updateShape(shape.id, { location_id: v })}
-                  emptyLabel={t.map.notLinkedOption}
-                />
-              </label>
-              {shape.location_id == null &&
+              <LinkPicker
+                key={shape.id}
+                value={shape.link}
+                onChange={(link) => updateShape(shape.id, { link })}
+              />
+              {shape.link === "" &&
                 (map.location_id != null ? (
                   <button type="button" className="btn btn-sm" onClick={() => createPlace("shape")}>
                     <MapPin size={14} /> {t.map.createPlace}
