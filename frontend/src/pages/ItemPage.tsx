@@ -1,5 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ExternalLink, MoreHorizontal, Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import {
+  Camera,
+  ExternalLink,
+  Map as MapIcon,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  ShoppingCart,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, type Category, get, type ItemDetail } from "../api";
@@ -36,6 +45,7 @@ import {
   useMe,
   useMeta,
 } from "../lib";
+import { itemPlaces, shapesHolding, useMaps } from "../map";
 import { categoryPaths } from "./ItemsPage";
 
 const statusBadge: Record<string, string> = {
@@ -54,6 +64,7 @@ export function ItemPage() {
   const { data: meta } = useMeta();
   const { data: locs } = useLocations();
   const { data: me } = useMe();
+  const { data: maps } = useMaps();
   const paths = useMemo(() => locationPaths(locs), [locs]);
   // ?add=100&lot=... (from scanning a part bag) opens Add stock filled in.
   const [params, setParams] = useSearchParams();
@@ -85,6 +96,7 @@ export function ItemPage() {
   });
   const low = !units && uncountedLots === 0 && item.min_stock != null && total < item.min_stock;
   const live = assets.filter((a) => a.status !== "retired");
+  const onMap = maps?.find((m) => shapesHolding(m.shapes, locs, itemPlaces(q.data)).size > 0);
 
   async function uploadPhoto(file: File) {
     try {
@@ -155,6 +167,11 @@ export function ItemPage() {
           <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
             <Plus size={16} /> {units ? t.item.addUnits : t.item.addStock}
           </button>
+          {onMap && (
+            <Link to={`/map?m=${onMap.id}&item=${id}`} className="btn">
+              <MapIcon size={15} /> {t.map.showOnMap}
+            </Link>
+          )}
           {can_edit && (
             <Link to={`/items/${id}/edit`} className="btn">
               <Pencil size={15} /> {t.common.edit}

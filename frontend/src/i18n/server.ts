@@ -38,6 +38,15 @@ const exact: Record<string, string> = {
   "could not read the CSV header": "Não foi possível ler o cabeçalho do CSV.",
   "at most 5000 rows per import": "No máximo 5000 linhas por importação.",
   "a location cannot be inside itself": "Um local não pode estar dentro de si próprio.",
+  "the room must be between 1 cm and 100 m on each side":
+    "A sala tem de ter entre 1 cm e 100 m de cada lado.",
+  "a map can have at most 500 shapes": "Um mapa pode ter no máximo 500 formas.",
+  "every shape needs its own id": "Cada forma precisa do seu próprio id.",
+  "shape names can be at most 80 characters": "Os nomes das formas têm no máximo 80 caracteres.",
+  "shape kind must be storage, furniture or fixture":
+    "O tipo da forma tem de ser storage, furniture ou fixture.",
+  "colours must look like #2563eb": "As cores têm de ser como #2563eb.",
+  "shapes must lie inside the room": "As formas têm de ficar dentro da sala.",
   "a category cannot be inside itself": "Uma categoria não pode estar dentro de si própria.",
   // auth
   "This account has been disabled.": "Esta conta foi desativada.",

@@ -366,6 +366,40 @@ func (q *Queries) CreatePrintJob(ctx context.Context, arg CreatePrintJobParams) 
 	return i, err
 }
 
+const createRoomMap = `-- name: CreateRoomMap :one
+INSERT INTO room_maps (name, location_id, width, height, shapes) VALUES (?, ?, ?, ?, ?) RETURNING id, name, location_id, width, height, shapes, version, updated_at
+`
+
+type CreateRoomMapParams struct {
+	Name       string  `json:"name"`
+	LocationID *int64  `json:"location_id"`
+	Width      float64 `json:"width"`
+	Height     float64 `json:"height"`
+	Shapes     string  `json:"shapes"`
+}
+
+func (q *Queries) CreateRoomMap(ctx context.Context, arg CreateRoomMapParams) (RoomMap, error) {
+	row := q.db.QueryRowContext(ctx, createRoomMap,
+		arg.Name,
+		arg.LocationID,
+		arg.Width,
+		arg.Height,
+		arg.Shapes,
+	)
+	var i RoomMap
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.LocationID,
+		&i.Width,
+		&i.Height,
+		&i.Shapes,
+		&i.Version,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createStock = `-- name: CreateStock :one
 INSERT INTO stock (item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, count_state)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version
@@ -444,6 +478,15 @@ DELETE FROM locations WHERE id = ?
 
 func (q *Queries) DeleteLocation(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteLocation, id)
+	return err
+}
+
+const deleteRoomMap = `-- name: DeleteRoomMap :exec
+DELETE FROM room_maps WHERE id = ?
+`
+
+func (q *Queries) DeleteRoomMap(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRoomMap, id)
 	return err
 }
 
@@ -756,6 +799,26 @@ func (q *Queries) GetPrintJob(ctx context.Context, id int64) (PrintJob, error) {
 		&i.Attempts,
 		&i.Error,
 		&i.PrintedAt,
+	)
+	return i, err
+}
+
+const getRoomMap = `-- name: GetRoomMap :one
+SELECT id, name, location_id, width, height, shapes, version, updated_at FROM room_maps WHERE id = ?
+`
+
+func (q *Queries) GetRoomMap(ctx context.Context, id int64) (RoomMap, error) {
+	row := q.db.QueryRowContext(ctx, getRoomMap, id)
+	var i RoomMap
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.LocationID,
+		&i.Width,
+		&i.Height,
+		&i.Shapes,
+		&i.Version,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -1358,6 +1421,42 @@ func (q *Queries) ListQueuedPrintJobs(ctx context.Context, limit int64) ([]Print
 	return items, nil
 }
 
+const listRoomMaps = `-- name: ListRoomMaps :many
+SELECT id, name, location_id, width, height, shapes, version, updated_at FROM room_maps ORDER BY name, id
+`
+
+func (q *Queries) ListRoomMaps(ctx context.Context) ([]RoomMap, error) {
+	rows, err := q.db.QueryContext(ctx, listRoomMaps)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoomMap
+	for rows.Next() {
+		var i RoomMap
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.LocationID,
+			&i.Width,
+			&i.Height,
+			&i.Shapes,
+			&i.Version,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStockByItem = `-- name: ListStockByItem :many
 SELECT id, item_id, location_id, quantity, lot, expires_on, owner_project_id, owner_department_id, created_at, updated_at, count_state, version FROM stock WHERE item_id = ? ORDER BY location_id, id
 `
@@ -1738,6 +1837,44 @@ func (q *Queries) UpdateLocation(ctx context.Context, arg UpdateLocationParams) 
 		&i.Description,
 		&i.CreatedAt,
 		&i.Version,
+	)
+	return i, err
+}
+
+const updateRoomMap = `-- name: UpdateRoomMap :one
+UPDATE room_maps SET name = ?, location_id = ?, width = ?, height = ?, shapes = ?,
+    version = version + 1, updated_at = CURRENT_TIMESTAMP
+WHERE id = ? RETURNING id, name, location_id, width, height, shapes, version, updated_at
+`
+
+type UpdateRoomMapParams struct {
+	Name       string  `json:"name"`
+	LocationID *int64  `json:"location_id"`
+	Width      float64 `json:"width"`
+	Height     float64 `json:"height"`
+	Shapes     string  `json:"shapes"`
+	ID         int64   `json:"id"`
+}
+
+func (q *Queries) UpdateRoomMap(ctx context.Context, arg UpdateRoomMapParams) (RoomMap, error) {
+	row := q.db.QueryRowContext(ctx, updateRoomMap,
+		arg.Name,
+		arg.LocationID,
+		arg.Width,
+		arg.Height,
+		arg.Shapes,
+		arg.ID,
+	)
+	var i RoomMap
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.LocationID,
+		&i.Width,
+		&i.Height,
+		&i.Shapes,
+		&i.Version,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

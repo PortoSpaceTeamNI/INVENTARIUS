@@ -78,6 +78,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PATCH /api/locations/{id}", h(s.updateLocation))
 	mux.Handle("DELETE /api/locations/{id}", h(s.deleteLocation))
 
+	mux.Handle("GET /api/maps", h(s.listMaps))
+	mux.Handle("POST /api/maps", h(s.createMap))
+	mux.Handle("GET /api/maps/{id}", h(s.getMap))
+	mux.Handle("PUT /api/maps/{id}", h(s.updateMap))
+	mux.Handle("DELETE /api/maps/{id}", h(s.deleteMap))
+
 	mux.Handle("GET /api/categories", h(s.listCategories))
 	mux.Handle("POST /api/categories", h(s.createCategory))
 	mux.Handle("PATCH /api/categories/{id}", h(s.updateCategory))

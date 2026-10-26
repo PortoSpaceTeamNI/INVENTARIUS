@@ -322,3 +322,33 @@ export async function api<T = void>(method: string, path: string, body?: unknown
 }
 
 export const get = <T>(path: string) => api<T>("GET", path);
+
+export type ShapeKind = "storage" | "furniture" | "fixture";
+
+/** A rectangle on a room map, in cm from the room's top-left corner. */
+export interface MapShape {
+  id: string;
+  label: string;
+  kind: ShapeKind;
+  /** "#rrggbb", or "" for the kind's default. */
+  color: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** The place this shape stands for; clicking it shows what is there. */
+  location_id: number | null;
+}
+
+/** Floor plan of a room, width × height cm (GET /api/maps). */
+export interface RoomMap {
+  id: number;
+  name: string;
+  /** The room's own location, if any; new places from the editor go inside it. */
+  location_id: number | null;
+  width: number;
+  height: number;
+  shapes: MapShape[];
+  version: number;
+  updated_at: string;
+}

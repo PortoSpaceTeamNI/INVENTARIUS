@@ -260,3 +260,20 @@ SELECT locations.id,
     CAST((SELECT count(*) FROM stock s WHERE s.location_id = locations.id) AS INTEGER) AS stock_count,
     CAST((SELECT count(*) FROM assets a WHERE a.location_id = locations.id) AS INTEGER) AS asset_count
 FROM locations;
+
+-- name: ListRoomMaps :many
+SELECT * FROM room_maps ORDER BY name, id;
+
+-- name: GetRoomMap :one
+SELECT * FROM room_maps WHERE id = ?;
+
+-- name: CreateRoomMap :one
+INSERT INTO room_maps (name, location_id, width, height, shapes) VALUES (?, ?, ?, ?, ?) RETURNING *;
+
+-- name: UpdateRoomMap :one
+UPDATE room_maps SET name = ?, location_id = ?, width = ?, height = ?, shapes = ?,
+    version = version + 1, updated_at = CURRENT_TIMESTAMP
+WHERE id = ? RETURNING *;
+
+-- name: DeleteRoomMap :exec
+DELETE FROM room_maps WHERE id = ?;

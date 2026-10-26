@@ -3,6 +3,7 @@ import {
   Boxes,
   FileUp,
   Home,
+  Map as MapIcon,
   MapPin,
   Printer,
   ScanLine,
@@ -29,6 +30,8 @@ import { LoansPage } from "./pages/LoansPage";
 import { LocationPage } from "./pages/LocationPage";
 import { LocationsPage } from "./pages/LocationsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MapEditPage } from "./pages/MapEditPage";
+import { MapPage } from "./pages/MapPage";
 import { PrintPage } from "./pages/PrintPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { ScanPage } from "./pages/ScanPage";
@@ -45,6 +48,8 @@ export function App() {
         <Route path="/c/:code" element={<CodePage />} />
         <Route path="/locations" element={<LocationsPage />} />
         <Route path="/locations/:id" element={<LocationPage />} />
+        <Route path="/map" element={<MapPage />} />
+        <Route path="/map/:id/edit" element={<MapEditPage />} />
         <Route path="/items" element={<ItemsPage />} />
         <Route path="/items/new" element={<ItemEditPage />} />
         <Route path="/items/:id" element={<ItemPage />} />
@@ -176,6 +181,9 @@ function Sidebar({ me }: { me: User }) {
         </NavLink>
         <NavLink to="/locations">
           <MapPin size={17} /> {t.nav.locations}
+        </NavLink>
+        <NavLink to="/map">
+          <MapIcon size={17} /> {t.nav.map}
         </NavLink>
         <NavLink to="/loans">
           <Wrench size={17} /> {t.nav.loans}
