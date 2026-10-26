@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, get, type Location } from "../api";
 import { LocationSelect } from "../components/pickers";
-import { Card, Empty, ErrorBox, Loading, Page, Sheet } from "../components/ui";
+import { Card, Empty, ErrorBox, Loading, Page, Sheet, useToast } from "../components/ui";
 import { useT } from "../i18n";
 import { useLocations } from "../lib";
 
@@ -197,10 +197,17 @@ export function NewLocationSheet(props: { open: boolean; onClose: () => void; pa
   const [name, setName] = useState("");
   const [parent, setParent] = useState<number | null>(props.parentId ?? null);
   const [print, setPrint] = useState(true);
+  // Several places numbered from..to, e.g. Gaveta 1 to Gaveta 30.
+  const [several, setSeveral] = useState(false);
+  const [from, setFrom] = useState("1");
+  const [to, setTo] = useState("");
   const [error, setError] = useState<unknown>(null);
   const qc = useQueryClient();
+  const toast = useToast();
   const navigate = useNavigate();
   const t = useT();
+  const count = Number(to) - Number(from) + 1;
+  const base = name.trim();
 
   // Each time it opens, start inside the place it was opened from: the
   // sheet stays mounted while moving between places' pages.
@@ -214,17 +221,26 @@ export function NewLocationSheet(props: { open: boolean; onClose: () => void; pa
   async function submit(e: FormEvent) {
     e.preventDefault();
     try {
-      const loc = await api<Location>("POST", "/api/locations", {
-        name,
-        parent_id: parent,
-        print_label: print,
-      });
+      const body = { name, parent_id: parent, print_label: print };
+      const locs = several
+        ? await api<Location[]>("POST", "/api/locations/range", {
+            ...body,
+            from: Number(from),
+            to: Number(to),
+          })
+        : [await api<Location>("POST", "/api/locations", body)];
       await qc.invalidateQueries({ queryKey: ["locations"] });
       qc.invalidateQueries({ queryKey: ["location"] });
       qc.invalidateQueries({ queryKey: ["location-counts"] });
       setName("");
+      setTo("");
       props.onClose();
-      if (props.parentId === undefined) navigate(`/locations/${loc.id}`);
+      if (several) toast(t.locs.createdN(locs.length));
+      // Opened from the list: go to the new place, or where the new ones are.
+      if (props.parentId === undefined) {
+        if (!several) navigate(`/locations/${locs[0].id}`);
+        else if (parent !== null) navigate(`/locations/${parent}`);
+      }
     } catch (err) {
       setError(err);
     }
@@ -238,22 +254,61 @@ export function NewLocationSheet(props: { open: boolean; onClose: () => void; pa
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={t.locs.namePh}
+            placeholder={several ? t.locs.baseNamePh : t.locs.namePh}
             required
             autoFocus
           />
         </label>
+        <label className="check">
+          <input type="checkbox" checked={several} onChange={(e) => setSeveral(e.target.checked)} />
+          {t.locs.several}
+        </label>
+        {several && (
+          <>
+            <div className="grid-2">
+              <label className="field">
+                <span>{t.locs.from}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>{t.locs.to}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={Number(from) || 0}
+                  max={(Number(from) || 0) + 99}
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  placeholder="30"
+                  required
+                />
+              </label>
+            </div>
+            {base && to !== "" && count >= 1 && count <= 100 && (
+              <span className="field-hint">
+                {t.locs.rangePreview(`${base} ${from}`, `${base} ${to}`, count)}
+              </span>
+            )}
+          </>
+        )}
         <label className="field">
           <span>{t.common.inside}</span>
           <LocationSelect value={parent} onChange={setParent} emptyLabel={t.common.nothingRoom} />
         </label>
         <label className="check">
           <input type="checkbox" checked={print} onChange={(e) => setPrint(e.target.checked)} />
-          {t.locs.printLabel}
+          {several ? t.locs.printLabels : t.locs.printLabel}
         </label>
         <ErrorBox error={error} />
         <button type="submit" className="btn btn-primary btn-lg btn-block">
-          {t.locs.create}
+          {several && count >= 1 && count <= 100 ? t.locs.createN(count) : t.locs.create}
         </button>
       </form>
     </Sheet>

@@ -8,6 +8,7 @@ import {
   ScanLine,
   Search,
   Settings,
+  Tag,
   Users,
   Wrench,
 } from "lucide-react";
@@ -17,8 +18,9 @@ import { ApiError, get, type OpenLoan, type User } from "./api";
 import { SearchPaletteProvider, useOpenSearch } from "./components/SearchPalette";
 import { BrandMark, Loading } from "./components/ui";
 import { LangToggle, useT } from "./i18n";
-import { useMe } from "./lib";
+import { useMe, usePrintHold } from "./lib";
 import { AssetPage } from "./pages/AssetPage";
+import { CategoriesPage } from "./pages/CategoriesPage";
 import { CodePage } from "./pages/CodePage";
 import { HomePage } from "./pages/HomePage";
 import { ImportPage } from "./pages/ImportPage";
@@ -49,6 +51,7 @@ export function App() {
         <Route path="/items/new" element={<ItemEditPage />} />
         <Route path="/items/:id" element={<ItemPage />} />
         <Route path="/items/:id/edit" element={<ItemEditPage />} />
+        <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/stock/:id" element={<StockPage />} />
         <Route path="/assets/:id" element={<AssetPage />} />
         <Route path="/loans" element={<LoansPage />} />
@@ -157,6 +160,7 @@ function TopBar({ me }: { me: User }) {
 function Sidebar({ me }: { me: User }) {
   const loans = useQuery({ queryKey: ["loans", "all"], queryFn: () => get<OpenLoan[]>("/api/loans") });
   const overdue = loans.data?.filter((l) => l.overdue).length ?? 0;
+  const { data: hold } = usePrintHold();
   const t = useT();
   return (
     <aside className="sidebar">
@@ -177,6 +181,9 @@ function Sidebar({ me }: { me: User }) {
         <NavLink to="/locations">
           <MapPin size={17} /> {t.nav.locations}
         </NavLink>
+        <NavLink to="/categories">
+          <Tag size={17} /> {t.nav.categories}
+        </NavLink>
         <NavLink to="/loans">
           <Wrench size={17} /> {t.nav.loans}
           {overdue > 0 && <span className="nav-count">{overdue}</span>}
@@ -187,6 +194,11 @@ function Sidebar({ me }: { me: User }) {
         </NavLink>
         <NavLink to="/print">
           <Printer size={17} /> {t.nav.labels}
+          {hold?.hold && hold.waiting > 0 && (
+            <span className="nav-count" title={t.print.waiting(hold.waiting)}>
+              {hold.waiting}
+            </span>
+          )}
         </NavLink>
         <NavLink to="/import">
           <FileUp size={17} /> {t.nav.import}

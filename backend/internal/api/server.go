@@ -74,11 +74,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/locations", h(s.listLocations))
 	mux.Handle("GET /api/locations/counts", h(s.locationCounts))
 	mux.Handle("POST /api/locations", h(s.createLocation))
+	mux.Handle("POST /api/locations/range", h(s.createLocationRange))
 	mux.Handle("GET /api/locations/{id}", h(s.getLocation))
 	mux.Handle("PATCH /api/locations/{id}", h(s.updateLocation))
 	mux.Handle("DELETE /api/locations/{id}", h(s.deleteLocation))
 
 	mux.Handle("GET /api/categories", h(s.listCategories))
+	mux.Handle("GET /api/categories/counts", h(s.categoryCounts))
 	mux.Handle("POST /api/categories", h(s.createCategory))
 	mux.Handle("PATCH /api/categories/{id}", h(s.updateCategory))
 	mux.Handle("DELETE /api/categories/{id}", h(s.deleteCategory))
@@ -112,8 +114,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/labels/{code}", h(s.labelPreview))
 	mux.Handle("POST /api/print", h(s.print))
 	mux.Handle("GET /api/print/jobs", h(s.listPrintJobs))
+	mux.Handle("GET /api/print/queue", h(s.printQueue))
+	mux.Handle("POST /api/print/cancel", h(s.cancelPrints))
+	mux.Handle("GET /api/print/hold", h(s.printHold))
+	mux.Handle("PUT /api/print/hold", h(s.printHold))
+	mux.Handle("POST /api/print/flush", h(s.flushPrints))
 	mux.Handle("POST /api/print/jobs/{id}/{op}", h(s.printJobOp))
 	mux.Handle("GET /api/printer", h(s.printerStatus))
+	mux.Handle("POST /api/printer/tape", h(s.newTapeRoll))
 
 	mux.Handle("POST /api/import/items", h(s.importItems))
 

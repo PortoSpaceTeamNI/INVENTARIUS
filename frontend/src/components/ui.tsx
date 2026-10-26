@@ -280,8 +280,8 @@ export function Menu(props: {
   items: (MenuItem | false | undefined)[];
   label: string;
   up?: boolean;
-  /** "lg" matches the large buttons in action bars. */
-  size?: "lg";
+  /** "lg" matches the large buttons in action bars; "sm" is a quiet button for rows. */
+  size?: "lg" | "sm";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -304,7 +304,7 @@ export function Menu(props: {
     <div className="menu" ref={ref}>
       <button
         type="button"
-        className={`btn icon-btn ${props.size === "lg" ? "btn-lg" : ""}`}
+        className={`btn icon-btn ${props.size === "lg" ? "btn-lg" : props.size === "sm" ? "btn-ghost btn-sm" : ""}`}
         aria-label={props.label}
         aria-haspopup="menu"
         aria-expanded={open}

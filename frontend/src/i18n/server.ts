@@ -23,6 +23,8 @@ const exact: Record<string, string> = {
   "the due time is in the past": "A data de devolução já passou.",
   "the CSV has no rows": "O CSV não tem linhas.",
   "send between 1 and 200 labels": "Envia entre 1 e 200 etiquetas.",
+  "tape length must be between 0.5 and 50 m": "O comprimento da fita tem de estar entre 0,5 e 50 m.",
+  "load 12 or 24 mm tape in the printer first": "Coloca primeiro fita de 12 ou 24 mm na impressora.",
   "photo too large (max 20 MB)": "Foto demasiado grande (máx. 20 MB).",
   "only waiting jobs can be cancelled": "Só se podem cancelar impressões em espera.",
   "only finished jobs can be retried": "Só se podem repetir impressões terminadas.",
@@ -39,6 +41,10 @@ const exact: Record<string, string> = {
   "at most 5000 rows per import": "No máximo 5000 linhas por importação.",
   "a location cannot be inside itself": "Um local não pode estar dentro de si próprio.",
   "a category cannot be inside itself": "Uma categoria não pode estar dentro de si própria.",
+  "unknown parent category": "Categoria de cima desconhecida.",
+  "give a range of 1 to 100 numbers, lowest first":
+    "Indica de 1 a 100 números, do mais baixo para o mais alto.",
+  "there is already a category with that name there": "Já existe ali uma categoria com esse nome.",
   // auth
   "This account has been disabled.": "Esta conta foi desativada.",
   "Login expired, try again.": "O login expirou, tenta outra vez.",

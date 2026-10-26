@@ -13,6 +13,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -112,6 +113,55 @@ func (s *Server) createLocation(w http.ResponseWriter, r *http.Request, u *auth.
 		s.enqueueLabel(r.Context(), u, codes.Location, loc.ID, loc.Name)
 	}
 	return writeJSON(w, loc)
+}
+
+// createLocationRange answers POST /api/locations/range: places named
+// "<name> <from>" to "<name> <to>" ("Gaveta 1" to "Gaveta 30"), all under
+// one parent, with their labels queued together.
+func (s *Server) createLocationRange(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	var b struct {
+		locationBody
+		From int `json:"from"`
+		To   int `json:"to"`
+	}
+	if err := decode(r, &b); err != nil {
+		return err
+	}
+	if err := b.validate(); err != nil {
+		return err
+	}
+	if b.From < 0 || b.To < b.From || b.To-b.From >= 100 {
+		return badRequest("give a range of 1 to 100 numbers, lowest first")
+	}
+	ctx := r.Context()
+	var locs []db.Location
+	err := s.store.Tx(ctx, func(tx *db.Queries) error {
+		for n := b.From; n <= b.To; n++ {
+			loc, err := tx.CreateLocation(ctx, db.CreateLocationParams{
+				ParentID: b.ParentID, Name: fmt.Sprintf("%s %d", b.Name, n), Description: b.Description,
+			})
+			if err != nil {
+				return err
+			}
+			locs = append(locs, loc)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if b.PrintLabel {
+		jobs := make([]db.CreatePrintJobParams, len(locs))
+		for i, l := range locs {
+			jobs[i] = db.CreatePrintJobParams{
+				Code: codes.Format(codes.Location, l.ID), Symbology: s.cfg.Symbology, Caption: s.defaultCaption(codes.Location, l.Name),
+			}
+		}
+		if _, err := s.queue.Enqueue(ctx, u.ID, jobs); err != nil {
+			slog.Error("enqueue labels", "places", len(locs), "err", err)
+		}
+	}
+	return writeJSON(w, locs)
 }
 
 // ancestors returns the path from the root to loc's parent.
@@ -249,6 +299,15 @@ func (s *Server) listCategories(w http.ResponseWriter, r *http.Request, u *auth.
 	return writeJSON(w, cats)
 }
 
+// categoryCounts answers how many items each category holds directly.
+func (s *Server) categoryCounts(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	rows, err := s.store.ListCategoryCounts(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, nonNil(rows))
+}
+
 type categoryBody struct {
 	ParentID *int64 `json:"parent_id"`
 	Name     string `json:"name"`
@@ -260,8 +319,8 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request, u *auth.
 	if err := decode(r, &b); err != nil {
 		return err
 	}
-	if b.Name = strings.TrimSpace(b.Name); b.Name == "" {
-		return badRequest("name is required")
+	if err := s.checkCategory(r.Context(), 0, &b); err != nil {
+		return err
 	}
 	var c db.Category
 	err := s.store.Tx(r.Context(), func(q *db.Queries) error {
@@ -287,23 +346,8 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request, u *auth.
 	if err := decode(r, &b); err != nil {
 		return err
 	}
-	if b.Name = strings.TrimSpace(b.Name); b.Name == "" {
-		return badRequest("name is required")
-	}
-	if b.ParentID != nil {
-		cats, err := s.store.ListCategories(r.Context())
-		if err != nil {
-			return err
-		}
-		parent := map[int64]*int64{}
-		for _, c := range cats {
-			parent[c.ID] = c.ParentID
-		}
-		for p, n := b.ParentID, 0; p != nil && n < 64; p, n = parent[*p], n+1 {
-			if *p == id {
-				return badRequest("a category cannot be inside itself")
-			}
-		}
+	if err := s.checkCategory(r.Context(), id, &b); err != nil {
+		return err
 	}
 	var c db.Category
 	err = s.store.Tx(r.Context(), func(q *db.Queries) error {
@@ -324,6 +368,34 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request, u *auth.
 		return err
 	}
 	return writeJSON(w, c)
+}
+
+// checkCategory trims b's name and checks that category id (0 for a new
+// one) can have it under b's parent: the parent exists, is not the category
+// or inside it. The duplicate-name check runs in the write transaction.
+func (s *Server) checkCategory(ctx context.Context, id int64, b *categoryBody) error {
+	if b.Name = strings.TrimSpace(b.Name); b.Name == "" {
+		return badRequest("name is required")
+	}
+	cats, err := s.store.ListCategories(ctx)
+	if err != nil {
+		return err
+	}
+	parent := map[int64]*int64{}
+	for _, c := range cats {
+		parent[c.ID] = c.ParentID
+	}
+	if b.ParentID != nil {
+		if _, ok := parent[*b.ParentID]; !ok {
+			return badRequest("unknown parent category")
+		}
+		for p, n := b.ParentID, 0; p != nil && n < 64; p, n = parent[*p], n+1 {
+			if *p == id {
+				return badRequest("a category cannot be inside itself")
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) deleteCategory(w http.ResponseWriter, r *http.Request, u *auth.User) error {

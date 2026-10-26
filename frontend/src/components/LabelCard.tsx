@@ -1,12 +1,24 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { useState } from "react";
-import { api, type Symbology } from "../api";
+import { api, type PrintLabel, type Symbology } from "../api";
 import { useT } from "../i18n";
-import { errorMessage, useMeta } from "../lib";
+import { errorMessage, invalidatePrints, useMeta, usePrintHold } from "../lib";
 import { useToast } from "./ui";
 
 const DOTS_PER_MM = 180 / 25.4;
+
+/** Sends labels to the printer as one job. It resolves to whether they
+ * are held (waiting for "Print now" on the Labels page). */
+export function usePrint() {
+  const qc = useQueryClient();
+  const { data: hold } = usePrintHold();
+  return async (labels: PrintLabel[]) => {
+    await api("POST", "/api/print", { labels });
+    invalidatePrints(qc);
+    return hold?.hold ?? false;
+  };
+}
 
 /** Shows the label as it will print, with a button to print it. "bare"
  * renders it without its own card (to sit inside another card). */
@@ -17,7 +29,7 @@ export function LabelCard({ code, caption, bare }: { code: string; caption?: str
   const [lengthMM, setLengthMM] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
-  const qc = useQueryClient();
+  const sendToPrinter = usePrint();
   const t = useT();
 
   const sym = symbology ?? meta?.symbology ?? "datamatrix";
@@ -27,9 +39,8 @@ export function LabelCard({ code, caption, bare }: { code: string; caption?: str
   async function print() {
     setBusy(true);
     try {
-      await api("POST", "/api/print", { labels: [{ code, symbology: sym, caption: cap }] });
-      toast(t.label.sent(code));
-      qc.invalidateQueries({ queryKey: ["print-jobs"] });
+      const held = await sendToPrinter([{ code, symbology: sym, caption: cap }]);
+      toast(held ? t.label.held(code) : t.label.sent(code));
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {

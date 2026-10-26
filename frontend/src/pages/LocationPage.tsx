@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, FileText, MapPin, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, FileText, MapPin, MoreHorizontal, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, get, type LocationDetail, type Stock } from "../api";
 import { ActionSheet } from "../components/ActionSheet";
 import { LabelCard } from "../components/LabelCard";
+import { PrintPickerSheet } from "../components/PrintPicker";
 import { LocationSelect } from "../components/pickers";
 import {
   Card,
@@ -33,6 +34,7 @@ export function LocationPage() {
   const { data: me } = useMe();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [taking, setTaking] = useState<{ stock: Stock; name: string; unit: string; reserved: number } | null>(
     null,
   );
@@ -98,6 +100,7 @@ export function LocationPage() {
             trigger={<MoreHorizontal size={18} />}
             items={[
               { label: t.loc.editPlace, icon: <Pencil size={15} />, onSelect: () => setEditing(true) },
+              { label: t.loc.printLabels, icon: <Printer size={15} />, onSelect: () => setPicking(true) },
               me?.role === "admin" && {
                 label: t.loc.deletePlace,
                 icon: <Trash2 size={15} />,
@@ -245,6 +248,7 @@ export function LocationPage() {
       </div>
 
       <NewLocationSheet open={adding} onClose={() => setAdding(false)} parentId={loc.id} />
+      {picking && <PrintPickerSheet detail={q.data} onClose={() => setPicking(false)} />}
       {editing && (
         <EditLocationSheet
           onClose={() => setEditing(false)}

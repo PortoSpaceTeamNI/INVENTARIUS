@@ -214,6 +214,19 @@ export interface PrintJob {
   printed_at: string | null;
 }
 
+export interface PrintHold {
+  hold: boolean;
+  /** Labels queued and not yet printed. */
+  waiting: number;
+}
+
+/** A label to print; caption left out means its usual one. */
+export interface PrintLabel {
+  code: string;
+  symbology?: Symbology;
+  caption?: string;
+}
+
 export interface PrinterState {
   enabled: boolean;
   model?: string;
@@ -222,6 +235,15 @@ export interface PrinterState {
   error?: string;
   checked_at: string;
   busy: boolean;
+  /** Estimate for the loaded cassette, counted from what the app printed. */
+  tape_roll?: TapeRoll;
+}
+
+export interface TapeRoll {
+  width_mm: number;
+  length_mm: number;
+  used_mm: number;
+  loaded_at: string;
 }
 
 export interface LocationDetail {

@@ -41,6 +41,11 @@ SELECT * FROM categories
 WHERE parent_id IS sqlc.narg(parent_id) AND name = sqlc.arg(name) COLLATE NOCASE AND id != sqlc.arg(exclude_id)
 LIMIT 1;
 
+-- name: ListCategoryCounts :many
+SELECT categories.id,
+    CAST((SELECT count(*) FROM items i WHERE i.category_id = categories.id) AS INTEGER) AS item_count
+FROM categories;
+
 -- name: DeleteCategory :exec
 DELETE FROM categories WHERE id = ?;
 
@@ -233,6 +238,17 @@ SELECT * FROM print_jobs ORDER BY id DESC LIMIT ?;
 -- name: ListQueuedPrintJobs :many
 SELECT * FROM print_jobs WHERE status = 'queued' ORDER BY id LIMIT ?;
 
+-- name: ListWaitingPrintJobs :many
+-- The queue: labels not printed yet, and failed ones that need a decision.
+SELECT * FROM print_jobs WHERE status IN ('queued', 'printing', 'failed') ORDER BY id;
+
+-- name: CancelPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = ''
+WHERE status IN ('queued', 'failed') AND id IN (sqlc.slice(ids));
+
+-- name: CancelAllPrintJobs :execrows
+UPDATE print_jobs SET status = 'cancelled', error = '' WHERE status IN ('queued', 'failed');
+
 -- name: GetPrintJob :one
 SELECT * FROM print_jobs WHERE id = ?;
 
@@ -260,3 +276,31 @@ SELECT locations.id,
     CAST((SELECT count(*) FROM stock s WHERE s.location_id = locations.id) AS INTEGER) AS stock_count,
     CAST((SELECT count(*) FROM assets a WHERE a.location_id = locations.id) AS INTEGER) AS asset_count
 FROM locations;
+
+-- name: ListDonePrintJobs :many
+SELECT * FROM print_jobs WHERE status = 'done' ORDER BY printed_at, id;
+
+-- name: CountTapeRolls :one
+SELECT count(*) FROM tape_rolls;
+
+-- name: GetCurrentTapeRoll :one
+SELECT * FROM tape_rolls WHERE width_mm = ? AND replaced_at IS NULL ORDER BY id DESC LIMIT 1;
+
+-- name: CreateTapeRoll :one
+INSERT INTO tape_rolls (width_mm, length_mm, used_dots) VALUES (?, ?, ?) RETURNING *;
+
+-- name: ReplaceTapeRolls :exec
+UPDATE tape_rolls SET replaced_at = CURRENT_TIMESTAMP WHERE width_mm = ? AND replaced_at IS NULL;
+
+-- name: AddTapeUsed :exec
+UPDATE tape_rolls SET used_dots = used_dots + sqlc.arg(dots) WHERE id = sqlc.arg(id);
+
+-- name: GetSetting :one
+SELECT value FROM settings WHERE key = ?;
+
+-- name: SetSetting :exec
+INSERT INTO settings (key, value) VALUES (?, ?)
+ON CONFLICT (key) DO UPDATE SET value = excluded.value;
+
+-- name: CountQueuedPrintJobs :one
+SELECT count(*) FROM print_jobs WHERE status = 'queued';

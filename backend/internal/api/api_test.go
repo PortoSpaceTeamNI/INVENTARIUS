@@ -331,6 +331,120 @@ func TestPrintFollowsLoadedTape(t *testing.T) {
 	}
 }
 
+func TestTapeRoll(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("ana@portospaceteam.pt")
+	ctx := context.Background()
+	// Two labels printed before tape was tracked, as one job.
+	for _, code := range []string{"L1", "L2"} {
+		j, err := e.store.CreatePrintJob(ctx, db.CreatePrintJobParams{UserID: 1, Code: code, Symbology: "datamatrix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.store.SetPrintJobStatus(ctx, db.SetPrintJobStatusParams{Status: "done", ID: j.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	roll := func() printqueue.TapeRoll {
+		t.Helper()
+		var st printqueue.PrinterState
+		admin.do("GET", "/api/printer", nil, 200, &st)
+		if st.TapeRoll == nil {
+			t.Fatal("no tape roll")
+		}
+		return *st.TapeRoll
+	}
+	setTape := func(mm int) {
+		e.printer.mu.Lock()
+		e.printer.tapeMM = mm
+		e.printer.mu.Unlock()
+	}
+
+	// Lead-in (24.5 mm) plus two ~26 mm labels.
+	before := roll()
+	if before.WidthMM != 12 || before.LengthMM != printqueue.DefaultRollMM || before.UsedMM < 55 || before.UsedMM > 90 {
+		t.Fatalf("first roll %+v, want ~65 mm of 8 m used", before)
+	}
+
+	admin.do("POST", "/api/locations", map[string]any{"name": "Shelf", "print_label": true}, 200, nil)
+	waitFor(t, "tape counted", func() bool { return roll().UsedMM > before.UsedMM })
+	if d := roll().UsedMM - before.UsedMM; d < 40 || d > 65 {
+		t.Fatalf("one label used %d mm, want ~50", d)
+	}
+
+	// Another width is another cassette, which starts full; the 12 mm one is kept.
+	setTape(24)
+	if r := roll(); r.WidthMM != 24 || r.UsedMM != 0 {
+		t.Fatalf("24 mm roll %+v", r)
+	}
+	setTape(12)
+	used := roll().UsedMM
+	if used <= before.UsedMM {
+		t.Fatalf("12 mm roll lost its count: %d", used)
+	}
+
+	var r printqueue.TapeRoll
+	admin.do("POST", "/api/printer/tape", map[string]int{"length_mm": 5000}, 200, &r)
+	if r.WidthMM != 12 || r.LengthMM != 5000 || r.UsedMM != 0 || roll() != r {
+		t.Fatalf("new roll %+v, current %+v", r, roll())
+	}
+	admin.do("POST", "/api/printer/tape", map[string]int{"length_mm": 100}, 400, nil)
+	setTape(18)
+	admin.do("POST", "/api/printer/tape", map[string]int{}, 400, nil)
+}
+
+func TestPrintHold(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("ana@portospaceteam.pt")
+	var hold struct {
+		Hold    bool `json:"hold"`
+		Waiting int  `json:"waiting"`
+	}
+	admin.do("PUT", "/api/print/hold", map[string]bool{"hold": true}, 200, &hold)
+	if !hold.Hold {
+		t.Fatal("hold not on")
+	}
+	var loc db.Location
+	admin.do("POST", "/api/locations", map[string]any{"name": "Armario 2"}, 200, &loc)
+	code := fmt.Sprintf("L%d", loc.ID)
+	// Labels sent one by one, further apart than the batch delay.
+	var jobs []db.PrintJob
+	for _, caption := range []any{nil, "", "Outro"} {
+		l := map[string]any{"code": code}
+		if caption != nil {
+			l["caption"] = caption
+		}
+		admin.do("POST", "/api/print", map[string]any{"labels": []any{l}}, 200, &jobs)
+		time.Sleep(120 * time.Millisecond)
+	}
+	if p := e.printer.printed(); len(p) != 0 {
+		t.Fatalf("printed %v while held", p)
+	}
+	admin.do("GET", "/api/print/hold", nil, 200, &hold)
+	if hold.Waiting != 3 {
+		t.Fatalf("%d waiting, want 3", hold.Waiting)
+	}
+	admin.do("GET", "/api/print/jobs", nil, 200, &jobs)
+	if jobs[2].Caption != "Armario 2" || jobs[1].Caption != "" || jobs[0].Caption != "Outro" {
+		t.Fatalf("captions %q %q %q", jobs[2].Caption, jobs[1].Caption, jobs[0].Caption)
+	}
+
+	admin.do("POST", "/api/print/flush", nil, 204, nil)
+	waitFor(t, "held labels printed", func() bool { return len(e.printer.printed()) > 0 })
+	if p := e.printer.printed(); len(p) != 1 || p[0] != 3 {
+		t.Fatalf("printed %v, want one job of 3", p)
+	}
+	// Still held afterwards.
+	admin.do("POST", "/api/print", map[string]any{"labels": []any{map[string]string{"code": code}}}, 200, nil)
+	time.Sleep(120 * time.Millisecond)
+	if p := e.printer.printed(); len(p) != 1 {
+		t.Fatalf("printed %v, want still one job", p)
+	}
+	// Turning hold off prints what was waiting.
+	admin.do("PUT", "/api/print/hold", map[string]bool{"hold": false}, 200, &hold)
+	waitFor(t, "printed after hold off", func() bool { return len(e.printer.printed()) == 2 })
+}
+
 func TestImport(t *testing.T) {
 	e := newEnv(t)
 	admin := e.login("ana@portospaceteam.pt")
@@ -563,5 +677,31 @@ func TestSearchWithoutAccentsOrSymbols(t *testing.T) {
 	admin.do("GET", "/api/search?q=recuperacao", nil, 200, &res)
 	if len(res.Locations) != 1 || res.Locations[0].ID != loc.ID {
 		t.Fatalf("place search: %+v", res.Locations)
+	}
+}
+
+func TestPrintQueueCancel(t *testing.T) {
+	e := newEnv(t)
+	u := e.login("ana@portospaceteam.pt")
+	u.do("PUT", "/api/print/hold", map[string]bool{"hold": true}, 200, nil)
+	var locs []db.Location
+	u.do("POST", "/api/locations/range", map[string]any{"name": "Gaveta", "from": 1, "to": 4, "print_label": true}, 200, &locs)
+	var queue []db.PrintJob
+	u.do("GET", "/api/print/queue", nil, 200, &queue)
+	if len(queue) != 4 {
+		t.Fatalf("queue has %d jobs, want 4", len(queue))
+	}
+	var res struct{ Cancelled int64 }
+	u.do("POST", "/api/print/cancel", map[string]any{"ids": []int64{queue[0].ID, queue[1].ID}}, 200, &res)
+	if res.Cancelled != 2 {
+		t.Fatalf("cancelled %d, want 2", res.Cancelled)
+	}
+	u.do("POST", "/api/print/cancel", map[string]any{}, 200, &res)
+	if res.Cancelled != 2 {
+		t.Fatalf("cancel all: %d, want 2", res.Cancelled)
+	}
+	u.do("GET", "/api/print/queue", nil, 200, &queue)
+	if len(queue) != 0 {
+		t.Fatalf("queue still has %d jobs", len(queue))
 	}
 }
