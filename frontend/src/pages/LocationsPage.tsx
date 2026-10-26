@@ -1,5 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, MapPin, Plus, Search } from "lucide-react";
+import {
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Map as MapIcon,
+  MapPin,
+  Plus,
+  Search,
+} from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, get, type Location } from "../api";
@@ -80,9 +88,14 @@ export function LocationsPage() {
       title={t.locs.title}
       subtitle={locs && t.locs.subtitle(locs.length, roots.length)}
       actions={
-        <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-          <Plus size={16} /> {t.locs.newPlace}
-        </button>
+        <>
+          <Link to="/map" className="btn">
+            <MapIcon size={16} /> {t.nav.map}
+          </Link>
+          <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
+            <Plus size={16} /> {t.locs.newPlace}
+          </button>
+        </>
       }
     >
       <ErrorBox error={error} />

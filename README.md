@@ -7,6 +7,8 @@ Inventory for the Porto Space Team room: **what we have, where it is, and who ha
 - Reservations: set parts or tools aside for something, so everyone sees what is free to use.
 - Every change is logged with who did it and for which project/department (INVICTUS, ICARUS).
 - Labels print on the Brother PT-E550W (12 or 24 mm tape): new places automatically, stock and units when asked for. Scanning a label opens its page.
+- A map of the room: tap a cabinet to see what is in it and add stock there; search an item to
+  see where it is. The layout (shapes, sizes, which place each one is) is edited in the app.
 - Google sign-in for `@portospaceteam.pt` accounts.
 
 Stack: Go + SQLite backend, React + TypeScript (Vite) frontend, the same toolchain as ARX.

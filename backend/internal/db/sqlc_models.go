@@ -132,6 +132,17 @@ type Reservation struct {
 	ReleasedAt   *time.Time `json:"released_at"`
 }
 
+type RoomMap struct {
+	ID         int64     `json:"id"`
+	Name       string    `json:"name"`
+	LocationID *int64    `json:"location_id"`
+	Width      float64   `json:"width"`
+	Height     float64   `json:"height"`
+	Shapes     string    `json:"shapes"`
+	Version    int64     `json:"version"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
 type Session struct {
 	TokenHash string    `json:"token_hash"`
 	UserID    int64     `json:"user_id"`

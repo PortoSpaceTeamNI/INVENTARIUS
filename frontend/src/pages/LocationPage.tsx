@@ -1,5 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, FileText, MapPin, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  FileText,
+  Map as MapIcon,
+  MapPin,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, get, type LocationDetail, type Stock } from "../api";
@@ -20,6 +29,7 @@ import {
 } from "../components/ui";
 import { useT } from "../i18n";
 import { code, errorMessage, itemTitle, qty, statusLabel, stockQty, useLocations, useMe } from "../lib";
+import { findOnMaps, useMaps } from "../map";
 import { NewLocationSheet, useLocationCounts } from "./LocationsPage";
 
 export function LocationPage() {
@@ -31,6 +41,7 @@ export function LocationPage() {
   const { data: locs } = useLocations();
   const { total } = useLocationCounts(locs);
   const { data: me } = useMe();
+  const { data: maps } = useMaps();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
   const [taking, setTaking] = useState<{ stock: Stock; name: string; unit: string; reserved: number } | null>(
@@ -46,6 +57,7 @@ export function LocationPage() {
   const { location: loc, path, children, stock, assets } = q.data;
   const empty = children.length === 0 && stock.length === 0 && assets.length === 0;
   const things = stock.length + assets.length;
+  const onMap = findOnMaps(maps, locs, loc.id);
 
   async function deletePlace() {
     if (!empty) {
@@ -93,6 +105,11 @@ export function LocationPage() {
           <button type="button" className="btn" onClick={() => setAdding(true)}>
             <MapPin size={15} /> {t.loc.placeInside}
           </button>
+          {onMap && (
+            <Link className="btn" to={`/map?m=${onMap.map.id}&loc=${loc.id}`}>
+              <MapIcon size={15} /> {t.map.showOnMap}
+            </Link>
+          )}
           <Menu
             label={t.common.more}
             trigger={<MoreHorizontal size={18} />}

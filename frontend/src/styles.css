@@ -2473,3 +2473,239 @@ dialog.sheet::backdrop {
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* ================================================================ room map */
+
+.map-layout {
+  align-items: start;
+}
+
+.map-card {
+  overflow: hidden;
+}
+
+/* Narrow screens scroll the map sideways rather than shrinking the labels away. */
+.map-scroll {
+  overflow-x: auto;
+  padding: 0.75rem;
+}
+
+.room-canvas {
+  display: block;
+  width: 100%;
+  min-width: 640px;
+  height: auto;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.room-canvas.editing {
+  touch-action: none;
+}
+
+.room-floor {
+  fill: var(--surface-2);
+}
+
+.room-wall {
+  fill: none;
+  stroke: var(--text-2);
+  stroke-width: 6;
+}
+
+.room-grid-line {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 0.6;
+}
+
+.room-rect {
+  stroke: rgb(0 0 0 / 0.35);
+  stroke-width: 1.2;
+}
+
+.room-fixture .room-rect {
+  opacity: 0.8;
+}
+
+.room-label {
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.room-shape {
+  transition: opacity 0.2s;
+}
+
+.room-shape.clickable {
+  cursor: pointer;
+}
+
+.room-canvas.editing .room-shape {
+  cursor: move;
+}
+
+.room-shape.clickable:hover .room-rect,
+.room-shape:focus-visible .room-rect {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.room-shape:focus {
+  outline: none;
+}
+
+.room-shape.selected .room-rect {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+
+.room-shape.dimmed {
+  opacity: 0.35;
+}
+
+.room-shape.highlighted .room-rect {
+  stroke: #ef4444;
+  stroke-width: 5;
+  animation: room-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes room-pulse {
+  50% {
+    stroke-width: 10;
+    stroke-opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-shape.highlighted .room-rect {
+    animation: none;
+  }
+}
+
+.room-badge circle {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.room-badge text {
+  fill: #fff;
+  font-weight: 700;
+}
+
+.room-handle {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 3;
+  cursor: nwse-resize;
+}
+
+.map-search {
+  position: relative;
+}
+
+.map-suggest {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  padding: 0.25rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.map-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-suggest-row:hover {
+  background: var(--surface-2);
+}
+
+.map-suggest-empty {
+  padding: 0.5rem 0.6rem;
+}
+
+.map-finding {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+.link-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-right: 0.4rem;
+  color: var(--accent-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.map-panel-path {
+  padding-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.map-panel-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.map-row-hit {
+  background: var(--warn-soft);
+}
+
+.map-pick-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.map-pick-row {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-pick-row:hover {
+  background: var(--surface-2);
+}
+
+.map-kind-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.map-count {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.map-color {
+  height: 40px;
+  padding: 0.2rem;
+}
+
+.map-pick-search {
+  flex: none;
+}
