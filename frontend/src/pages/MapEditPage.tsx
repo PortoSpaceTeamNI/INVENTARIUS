@@ -37,13 +37,25 @@ export function MapEditPage() {
   return <Editor key={q.data.id} initial={q.data} />;
 }
 
+/** The parts of a map the editor changes, to tell whether there is anything to save. */
+const layoutKey = (m: RoomMap) => JSON.stringify([m.name, m.location_id, m.width, m.height, m.shapes]);
+
 function Editor(props: { initial: RoomMap }) {
   const [map, setMap] = useState<RoomMap>(props.initial);
   const [params] = useSearchParams();
   const [selected, setSelected] = useState<string | null>(params.get("shape"));
-  const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  // Changes save by themselves shortly after they are made, and when leaving
+  // the editor, so nothing is lost by navigating away without pressing Save.
+  const latest = useRef(map);
+  latest.current = map;
+  const savedKey = useRef(layoutKey(props.initial));
+  const inFlight = useRef(false);
+  const again = useRef(false);
+  const deleted = useRef(false);
+  const key = layoutKey(map);
+  const dirty = key !== savedKey.current;
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
   const qc = useQueryClient();
@@ -56,7 +68,6 @@ function Editor(props: { initial: RoomMap }) {
 
   function change(next: RoomMap) {
     setMap(next);
-    setDirty(true);
   }
   function updateShape(sid: string, patch: Partial<MapShape>) {
     change({
@@ -155,28 +166,58 @@ function Editor(props: { initial: RoomMap }) {
     drag.current = null;
   }
 
-  async function save() {
+  /** Saves the latest layout; one save at a time, the next one follows. */
+  async function save(): Promise<boolean> {
+    if (deleted.current) return false;
+    if (inFlight.current) {
+      again.current = true;
+      return false;
+    }
+    const body = latest.current;
+    const bodyKey = layoutKey(body);
+    if (bodyKey === savedKey.current) return true;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      const saved = await api<RoomMap>("PUT", `/api/maps/${map.id}`, map);
-      setMap(saved);
-      setDirty(false);
+      const saved = await api<RoomMap>("PUT", `/api/maps/${body.id}`, body);
+      savedKey.current = bodyKey;
+      // Keep edits made while saving; only the version moves on.
+      latest.current = { ...latest.current, version: saved.version };
+      setMap((m) => ({ ...m, version: saved.version, updated_at: saved.updated_at }));
+      qc.setQueryData(["map", saved.id], { ...body, version: saved.version, updated_at: saved.updated_at });
       qc.invalidateQueries({ queryKey: ["maps"] });
-      qc.setQueryData(["map", saved.id], saved);
-      toast(t.map.saved);
+      return true;
     } catch (err) {
       setError(err);
+      return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
+      if (again.current) {
+        again.current = false;
+        void save();
+      }
     }
   }
+
+  // Save a moment after the last change (a drag makes many).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: save reads the latest map from a ref
+  useEffect(() => {
+    if (key === savedKey.current) return;
+    const timer = setTimeout(() => void save(), 800);
+    return () => clearTimeout(timer);
+  }, [key]);
+
+  // Leaving the editor saves what is left.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, on leaving
+  useEffect(() => () => void save(), []);
 
   async function deleteMap() {
     if (!confirm(t.map.confirmDelete(map.name))) return;
     try {
       await api("DELETE", `/api/maps/${map.id}`);
-      setDirty(false);
+      deleted.current = true;
       qc.invalidateQueries({ queryKey: ["maps"] });
       toast(t.map.deleted(map.name));
       navigate("/map", { replace: true });
@@ -209,19 +250,28 @@ function Editor(props: { initial: RoomMap }) {
     <Page
       crumbs={[{ label: t.map.title, to: `/map?m=${map.id}` }]}
       title={t.map.editTitle(map.name)}
-      subtitle={dirty ? <span className="text-warn">{t.map.unsaved}</span> : t.map.editHint}
+      subtitle={
+        busy ? (
+          <span className="muted">{t.common.saving}</span>
+        ) : dirty ? (
+          <span className="text-warn">{t.map.unsaved}</span>
+        ) : (
+          t.map.editHint
+        )
+      }
       actions={
         <>
-          <button type="button" className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
-            <Save size={15} /> {busy ? t.common.saving : t.common.save}
-          </button>
-          <Link
-            to={`/map?m=${map.id}`}
-            className="btn"
-            onClick={(e) => {
-              if (dirty && !confirm(t.map.discard)) e.preventDefault();
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy}
+            onClick={async () => {
+              if (await save()) toast(t.map.saved);
             }}
           >
+            <Save size={15} /> {busy ? t.common.saving : t.common.save}
+          </button>
+          <Link to={`/map?m=${map.id}`} className="btn">
             {t.common.done}
           </Link>
           {me?.role === "admin" && (
@@ -405,7 +455,12 @@ function RoomSize(props: { label: string; value: string; min: number; onChange: 
       <input
         inputMode="decimal"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          // Take a size as it is typed, once it fits the shapes.
+          const cm = Math.round(Number(e.target.value.replace(",", ".")) * 100);
+          if (Number.isFinite(cm) && cm >= props.min) props.onChange(cm);
+        }}
         onBlur={() => {
           const cm = Math.round(Number(text.replace(",", ".")) * 100);
           if (Number.isFinite(cm) && cm > 0) {
