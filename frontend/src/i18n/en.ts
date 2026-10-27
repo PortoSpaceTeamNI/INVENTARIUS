@@ -646,7 +646,8 @@ export const en = {
     inside: "Inside",
     // editor
     editTitle: (n: string) => `Layout of ${n}`,
-    editHint: "Drag to move, drag the corner to resize. Arrow keys nudge, Delete removes.",
+    editHint:
+      "Drag to move, drag the corner to resize. Arrow keys nudge, Delete removes. Changes save by themselves.",
     add: "Add",
     kinds: { storage: "Storage", furniture: "Furniture", fixture: "Door, window, other" },
     newLabel: { storage: "New cabinet", furniture: "New table", fixture: "New fixture" },
@@ -671,7 +672,6 @@ export const en = {
     roomHeight: "Depth (m)",
     saved: "Map saved",
     unsaved: "Unsaved changes",
-    discard: "Discard your changes to the map?",
     deleteMap: "Delete map",
     confirmDelete: (n: string) => `Delete the map ${n}? The places and what is in them stay.`,
     deleted: (n: string) => `Deleted ${n}`,

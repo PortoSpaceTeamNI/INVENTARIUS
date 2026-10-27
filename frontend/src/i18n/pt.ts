@@ -653,7 +653,7 @@ export const pt: Dict = {
     // editor
     editTitle: (n: string) => `Planta de ${n}`,
     editHint:
-      "Arrasta para mover, arrasta o canto para mudar o tamanho. Setas para ajustar, Delete para remover.",
+      "Arrasta para mover, arrasta o canto para mudar o tamanho. Setas para ajustar, Delete para remover. As alterações guardam-se sozinhas.",
     add: "Adicionar",
     kinds: { storage: "Arrumação", furniture: "Mobília", fixture: "Porta, janela, outro" },
     newLabel: { storage: "Novo armário", furniture: "Nova mesa", fixture: "Novo elemento" },
@@ -678,7 +678,6 @@ export const pt: Dict = {
     roomHeight: "Profundidade (m)",
     saved: "Mapa guardado",
     unsaved: "Alterações por guardar",
-    discard: "Descartar as alterações ao mapa?",
     deleteMap: "Apagar mapa",
     confirmDelete: (n: string) => `Apagar o mapa ${n}? Os locais e o que têm ficam.`,
     deleted: (n: string) => `Mapa ${n} apagado`,
