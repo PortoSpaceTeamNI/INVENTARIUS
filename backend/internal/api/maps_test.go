@@ -53,6 +53,14 @@ func TestRoomMaps(t *testing.T) {
 	// Saving from the old version is refused.
 	member.do("PUT", path, body, http.StatusConflict, nil)
 
+	// A link to something deleted since does not stop the map from saving.
+	admin.do("DELETE", "/api/items/"+strconv.FormatInt(item.ID, 10), nil, http.StatusNoContent, nil)
+	body["version"] = saved.Version
+	member.do("PUT", path, body, http.StatusOK, &saved)
+	if saved.Shapes[2].Link != "I"+strconv.FormatInt(item.ID, 10) {
+		t.Fatalf("dangling link dropped: %+v", saved.Shapes[2])
+	}
+
 	body["version"] = saved.Version
 	bad := func(change func(s map[string]any)) {
 		t.Helper()

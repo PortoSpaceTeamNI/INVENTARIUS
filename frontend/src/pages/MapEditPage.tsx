@@ -29,9 +29,29 @@ function toMap(svg: SVGSVGElement, e: { clientX: number; clientY: number }) {
 }
 
 /** Editor for a room map: move, resize, add and remove shapes and link them to places. */
+/**
+ * The save still running from an editor that was just left. Opening the
+ * editor again waits for it, so it starts from the saved map and version
+ * rather than from the one before.
+ */
+let pendingSave: Promise<unknown> = Promise.resolve();
+
 export function MapEditPage() {
   const id = Number(useParams().id);
-  const q = useQuery({ queryKey: ["map", id], queryFn: () => get<RoomMap>(`/api/maps/${id}`) });
+  // Always fetched fresh (no cache): the editor starts from what it gets.
+  const q = useQuery({
+    queryKey: ["map", id],
+    queryFn: async () => {
+      // A save can start another one as it ends; wait for all of them.
+      for (let p = pendingSave; ; p = pendingSave) {
+        await p;
+        if (p === pendingSave) break;
+      }
+      return get<RoomMap>(`/api/maps/${id}`);
+    },
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
   if (q.isPending) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
   return <Editor key={q.data.id} initial={q.data} />;
@@ -66,16 +86,16 @@ function Editor(props: { initial: RoomMap }) {
 
   const shape = map.shapes.find((s) => s.id === selected) ?? null;
 
-  function change(next: RoomMap) {
+  // Changes apply to the current map, not the one this render saw: a save
+  // finishing or a place being created can land in between.
+  function change(next: RoomMap | ((m: RoomMap) => RoomMap)) {
     setMap(next);
   }
   function updateShape(sid: string, patch: Partial<MapShape>) {
-    change({
-      ...map,
-      shapes: map.shapes.map((s) =>
-        s.id === sid ? clampShape({ ...s, ...patch }, map.width, map.height) : s,
-      ),
-    });
+    change((m) => ({
+      ...m,
+      shapes: m.shapes.map((s) => (s.id === sid ? clampShape({ ...s, ...patch }, m.width, m.height) : s)),
+    }));
   }
   function addShape(kind: ShapeKind, from?: MapShape) {
     const base: MapShape = from
@@ -92,11 +112,11 @@ function Editor(props: { initial: RoomMap }) {
           link: "",
         };
     const s = clampShape({ ...base, id: newShapeId(map.shapes) }, map.width, map.height);
-    change({ ...map, shapes: [...map.shapes, s] });
+    change((m) => ({ ...m, shapes: [...m.shapes, s] }));
     setSelected(s.id);
   }
   function removeShape(sid: string) {
-    change({ ...map, shapes: map.shapes.filter((s) => s.id !== sid) });
+    change((m) => ({ ...m, shapes: m.shapes.filter((s) => s.id !== sid) }));
     setSelected(null);
   }
 
@@ -160,7 +180,7 @@ function Editor(props: { initial: RoomMap }) {
     }
     const cur = map.shapes.find((s) => s.id === d.id);
     if (cur && cur.x === next.x && cur.y === next.y && cur.w === next.w && cur.h === next.h) return;
-    change({ ...map, shapes: map.shapes.map((s) => (s.id === d.id ? next : s)) });
+    change((m) => ({ ...m, shapes: m.shapes.map((s) => (s.id === d.id ? next : s)) }));
   }
   function onPointerUp() {
     drag.current = null;
@@ -179,13 +199,14 @@ function Editor(props: { initial: RoomMap }) {
     inFlight.current = true;
     setBusy(true);
     setError(null);
+    const put = api<RoomMap>("PUT", `/api/maps/${body.id}`, body);
+    pendingSave = put.catch(() => {});
     try {
-      const saved = await api<RoomMap>("PUT", `/api/maps/${body.id}`, body);
+      const saved = await put;
       savedKey.current = bodyKey;
       // Keep edits made while saving; only the version moves on.
       latest.current = { ...latest.current, version: saved.version };
       setMap((m) => ({ ...m, version: saved.version, updated_at: saved.updated_at }));
-      qc.setQueryData(["map", saved.id], { ...body, version: saved.version, updated_at: saved.updated_at });
       qc.invalidateQueries({ queryKey: ["maps"] });
       return true;
     } catch (err) {
@@ -236,7 +257,7 @@ function Editor(props: { initial: RoomMap }) {
       });
       qc.invalidateQueries({ queryKey: ["locations"] });
       if (target === "shape" && shape) updateShape(shape.id, { link: `L${loc.id}` });
-      else change({ ...map, location_id: loc.id });
+      else change((m) => ({ ...m, location_id: loc.id }));
       toast(t.map.placeCreated(loc.name));
     } catch (err) {
       setError(err);
@@ -409,13 +430,17 @@ function Editor(props: { initial: RoomMap }) {
               <div className="field-hint">{t.map.selectHint}</div>
               <label className="field">
                 <span>{t.common.name}</span>
-                <input value={map.name} onChange={(e) => change({ ...map, name: e.target.value })} required />
+                <input
+                  value={map.name}
+                  onChange={(e) => change((m) => ({ ...m, name: e.target.value }))}
+                  required
+                />
               </label>
               <label className="field">
                 <span>{t.map.roomPlace}</span>
                 <LocationSelect
                   value={map.location_id}
-                  onChange={(v) => change({ ...map, location_id: v })}
+                  onChange={(v) => change((m) => ({ ...m, location_id: v }))}
                   emptyLabel={t.map.noRoomPlace}
                 />
               </label>
@@ -429,13 +454,13 @@ function Editor(props: { initial: RoomMap }) {
                   label={t.map.roomWidth}
                   value={metres(map.width)}
                   min={Math.max(...map.shapes.map((s) => s.x + s.w), 1)}
-                  onChange={(cm) => change({ ...map, width: cm })}
+                  onChange={(cm) => change((m) => ({ ...m, width: cm }))}
                 />
                 <RoomSize
                   label={t.map.roomHeight}
                   value={metres(map.height)}
                   min={Math.max(...map.shapes.map((s) => s.y + s.h), 1)}
-                  onChange={(cm) => change({ ...map, height: cm })}
+                  onChange={(cm) => change((m) => ({ ...m, height: cm }))}
                 />
               </div>
             </div>
