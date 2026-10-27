@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, RefreshCw, RotateCcw, Tag, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, get, type PrinterState, type PrintJob, type Symbology } from "../api";
 import { Card, Empty, ErrorBox, Page, useToast } from "../components/ui";
@@ -56,6 +56,7 @@ export function PrintPage() {
     <Page title={t.print.title} subtitle={t.print.subtitle}>
       <div className="layout-2">
         <div className="stack" style={{ gap: "1.25rem" }}>
+          <CustomLabel />
           <BatchPrint />
           <Card title={t.print.recent} count={jobs.data?.length}>
             {jobs.data?.length === 0 ? (
@@ -67,23 +68,40 @@ export function PrintPage() {
                 {jobs.data?.map((j) => {
                   const cls = statusBadge[j.status];
                   const text = t.print.job[j.status];
+                  const custom = customJob(j);
                   return (
                     <div key={j.id} className="list-row">
                       <img
                         className="label-thumb"
-                        src={`/api/labels/${j.code}?symbology=${j.symbology}&caption=${encodeURIComponent(j.caption)}`}
+                        src={
+                          custom
+                            ? customSrc(j.caption, custom.qr)
+                            : `/api/labels/${j.code}?symbology=${j.symbology}&caption=${encodeURIComponent(j.caption)}`
+                        }
                         alt=""
                         loading="lazy"
                       />
                       <div className="row-main">
                         <div className="row-title">
-                          <Link to={`/c/${j.code}`} className="mono">
-                            {j.code}
-                          </Link>
-                          {j.caption && <span className="muted"> · {j.caption}</span>}
+                          {custom ? (
+                            <span>{j.caption.replaceAll("\n", " · ") || t.print.custom.qrOnly}</span>
+                          ) : (
+                            <>
+                              <Link to={`/c/${j.code}`} className="mono">
+                                {j.code}
+                              </Link>
+                              {j.caption && <span className="muted"> · {j.caption}</span>}
+                            </>
+                          )}
                         </div>
                         <div className="row-meta">
-                          <span>{symbolName(j.symbology)}</span>
+                          <span>
+                            {custom
+                              ? custom.qr
+                                ? t.print.custom.withQR
+                                : t.print.custom.textOnly
+                              : symbolName(j.symbology)}
+                          </span>
                           <span>{when(j.created_at)}</span>
                           {j.error && <span className="text-danger">{serverText(j.error)}</span>}
                         </div>
@@ -177,6 +195,139 @@ export function PrintPage() {
         </div>
       </div>
     </Page>
+  );
+}
+
+/** Free-text jobs have a code of "~" followed by their QR content. */
+function customJob(j: PrintJob): { qr: string } | null {
+  return j.code.startsWith("~") ? { qr: j.code.slice(1) } : null;
+}
+
+const customSrc = (text: string, qr: string) =>
+  `/api/labels/custom?text=${encodeURIComponent(text)}&qr=${encodeURIComponent(qr)}`;
+
+/** A label with any text (and optionally a QR code), not tied to anything
+ * in the inventory: "Do not touch", a cable tag, a link to the wiki. */
+function CustomLabel() {
+  const [text, setText] = useState("");
+  const [qr, setQR] = useState("");
+  const [copies, setCopies] = useState(1);
+  const [preview, setPreview] = useState<{ src?: string; error?: string }>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
+  const empty = !text.trim() && !qr.trim();
+
+  // The preview is drawn by the server, so it is exactly what will print;
+  // fetched after a pause in typing.
+  useEffect(() => {
+    if (empty) {
+      setPreview({});
+      return;
+    }
+    let url = "";
+    let gone = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(customSrc(text, qr));
+        if (!res.ok) {
+          const msg = await res
+            .json()
+            .then((b) => b.error as string)
+            .catch(() => res.statusText);
+          if (!gone) setPreview({ error: msg });
+          return;
+        }
+        url = URL.createObjectURL(await res.blob());
+        if (!gone) setPreview({ src: url });
+      } catch (e) {
+        if (!gone) setPreview({ error: errorMessage(e) });
+      }
+    }, 250);
+    return () => {
+      gone = true;
+      clearTimeout(timer);
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [text, qr, empty]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const label = { text, qr };
+      await api("POST", "/api/print", { labels: Array.from({ length: copies }, () => label) });
+      toast(t.print.sent(copies));
+      qc.invalidateQueries({ queryKey: ["print-jobs"] });
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title={t.print.custom.title}>
+      <form className="card-pad form" onSubmit={submit}>
+        <label className="field">
+          <span>{t.print.custom.text}</span>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={t.print.custom.textPh}
+            rows={2}
+            maxLength={200}
+          />
+          <span className="field-hint">{t.print.custom.textHint}</span>
+        </label>
+        <label className="field">
+          <span>{t.print.custom.qr}</span>
+          <input
+            value={qr}
+            onChange={(e) => setQR(e.target.value)}
+            placeholder={t.print.custom.qrPh}
+            maxLength={300}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <span className="field-hint">{t.print.custom.qrHint}</span>
+        </label>
+        {!empty && (
+          <div className="custom-label-preview">
+            {preview.error ? (
+              <span className="text-danger small">{serverText(preview.error)}</span>
+            ) : (
+              preview.src && (
+                <div className="label-preview">
+                  <img src={preview.src} alt={t.print.custom.alt} />
+                </div>
+              )
+            )}
+          </div>
+        )}
+        <div className="row" style={{ flexWrap: "nowrap" }}>
+          <label className="row small" style={{ gap: "0.45rem", flexWrap: "nowrap" }}>
+            {t.print.custom.copies}
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={copies}
+              onChange={(e) => setCopies(Math.min(50, Math.max(1, Math.trunc(Number(e.target.value)) || 1)))}
+              style={{ width: "4.5rem" }}
+            />
+          </label>
+          <button type="submit" className="btn btn-primary" disabled={empty || busy || !!preview.error}>
+            <Printer size={15} /> {t.print.print}
+          </button>
+        </div>
+        <ErrorBox error={error} />
+      </form>
+    </Card>
   );
 }
 

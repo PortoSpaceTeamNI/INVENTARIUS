@@ -2250,6 +2250,15 @@ dialog.sheet::backdrop {
   gap: 0.6rem;
 }
 
+.custom-label-preview {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.custom-label-preview .label-preview {
+  display: inline-grid;
+}
+
 .label-thumb {
   height: 30px;
   image-rendering: pixelated;

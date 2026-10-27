@@ -323,3 +323,103 @@ func plain(s string) string {
 	}
 	return b.String()
 }
+
+// MaxTextLines is the most lines a free-text label takes: four lines of the
+// plain font just fit the band of 12 mm tape.
+const MaxTextLines = 4
+
+// Text is a free-text label that isn't tied to any code: a few lines of
+// text and, optionally, a QR code with any content (a URL, a note).
+type Text struct {
+	Lines []string
+	QR    string
+}
+
+// TextLines splits s into the lines of a free-text label, dropping blank
+// ones and folding each to the label font.
+func TextLines(s string) []string {
+	var out []string
+	for _, l := range strings.Split(s, "\n") {
+		if l = plain(strings.Join(strings.Fields(l), " ")); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// RenderText draws a free-text label for tape t. The text is drawn as big as
+// the lines fit across the tape, each line centred; a QR code goes on the
+// left, the height of the tape.
+func RenderText(s Text, t Tape) (*image.Gray, error) {
+	k, band := t.Scale, t.BandDots
+	inner := band - 2*pad*k
+	gap := gap * k
+	n := len(s.Lines)
+	if n == 0 && s.QR == "" {
+		return nil, fmt.Errorf("a label needs some text or a QR code")
+	}
+	if n > MaxTextLines {
+		return nil, fmt.Errorf("a label has at most %d lines of text", MaxTextLines)
+	}
+
+	var sym image.Image
+	symW := 0
+	if s.QR != "" {
+		// Byte mode, not upper case like code labels: the content is the
+		// user's, and URLs can be case sensitive.
+		bc, err := qr.Encode(s.QR, qr.L, qr.Auto)
+		if err != nil {
+			return nil, fmt.Errorf("encode qr: %w", err)
+		}
+		b := bc.Bounds()
+		// Modules of one dot (0.14 mm) are too fine for phone cameras.
+		scale := min(4*k, inner/b.Dy())
+		if scale < 2 {
+			return nil, fmt.Errorf("the QR content is too long for %d mm tape", t.MM)
+		}
+		img := image.NewGray(image.Rect(0, 0, b.Dx()*scale, b.Dy()*scale))
+		for y := 0; y < img.Bounds().Dy(); y++ {
+			for x := 0; x < img.Bounds().Dx(); x++ {
+				c := color.GrayModel.Convert(bc.At(b.Min.X+x/scale, b.Min.Y+y/scale)).(color.Gray)
+				img.Pix[y*img.Stride+x] = c.Y
+			}
+		}
+		sym, symW = img, img.Bounds().Dx()
+	}
+
+	// The biggest font size at which all lines fit across the band.
+	tk := 1
+	if n > 0 {
+		for tk = 1; n*lineH(tk+1)+(n-1)*gap <= inner; tk++ {
+		}
+		if n*lineH(tk)+(n-1)*gap > inner {
+			return nil, fmt.Errorf("a label has at most %d lines of text", MaxTextLines)
+		}
+	}
+	textW := 0
+	for _, l := range s.Lines {
+		textW = max(textW, textWidth(l, tk))
+	}
+
+	w, textX := symW, 0
+	if n > 0 {
+		if sym != nil {
+			// Wide enough to act as the symbol's quiet zone.
+			textX = symW + 12*k
+		}
+		w = textX + textW
+	}
+
+	img := image.NewGray(image.Rect(0, 0, w, band))
+	draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
+	if sym != nil {
+		top := (band - sym.Bounds().Dy()) / 2
+		draw.Draw(img, sym.Bounds().Add(image.Pt(0, top)), sym, image.Point{}, draw.Src)
+	}
+	y := (band - (n*lineH(tk) + (n-1)*gap)) / 2
+	for _, l := range s.Lines {
+		drawText(img, textX+(textW-textWidth(l, tk))/2, y, l, tk)
+		y += lineH(tk) + gap
+	}
+	return img, nil
+}

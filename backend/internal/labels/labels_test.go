@@ -135,3 +135,61 @@ func writePNG(t *testing.T, path string, img image.Image) {
 		t.Fatal(err)
 	}
 }
+
+func TestRenderText(t *testing.T) {
+	url := "https://example.com/Some/Path?x=1"
+	tests := []struct {
+		tape Tape
+		spec Text
+		k    int // expected font size
+	}{
+		{Tape12, Text{Lines: []string{"Do not touch"}}, 4},
+		{Tape12, Text{Lines: []string{"Ignition box", "Keep dry"}}, 2},
+		{Tape12, Text{Lines: []string{"a", "b", "c", "d"}}, 1},
+		{Tape12, Text{Lines: []string{"Wiki"}, QR: url}, 4},
+		{Tape12, Text{QR: url}, 0},
+		{Tape24, Text{Lines: []string{"Do not touch"}}, 8},
+		{Tape24, Text{Lines: []string{"Ignition box", "Keep dry"}, QR: url}, 4},
+	}
+	dir := os.Getenv("LABELS_OUT")
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d_%dmm", i, tc.tape.MM), func(t *testing.T) {
+			img, err := RenderText(tc.spec, tc.tape)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if img.Bounds().Dy() != tc.tape.BandDots {
+				t.Fatalf("height %d, want %d", img.Bounds().Dy(), tc.tape.BandDots)
+			}
+			if tc.k > 0 {
+				want := textWidth(tc.spec.Lines[0], tc.k)
+				if tc.spec.QR == "" && img.Bounds().Dx() < want {
+					t.Errorf("width %d, want at least %d (font x%d)", img.Bounds().Dx(), want, tc.k)
+				}
+			}
+			if tc.spec.QR != "" {
+				if got := decode(t, img, tc.tape, QR); got != url {
+					t.Errorf("QR decodes to %q, want %q", got, url)
+				}
+			}
+			if dir != "" {
+				f, _ := os.Create(filepath.Join(dir, fmt.Sprintf("text-%d-%dmm.png", i, tc.tape.MM)))
+				png.Encode(f, Preview(img, tc.tape))
+				f.Close()
+			}
+		})
+	}
+	if _, err := RenderText(Text{}, Tape12); err == nil {
+		t.Error("empty label rendered")
+	}
+	if _, err := RenderText(Text{Lines: []string{"1", "2", "3", "4", "5"}}, Tape12); err == nil {
+		t.Error("five lines rendered")
+	}
+}
+
+func TestTextLines(t *testing.T) {
+	got := TextLines("  Eletrónica \n\n  bancada   2\n")
+	if fmt.Sprint(got) != "[Eletronica bancada 2]" {
+		t.Errorf("got %q", got)
+	}
+}

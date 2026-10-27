@@ -115,6 +115,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/loans", h(s.listLoans))
 	mux.Handle("GET /api/movements", h(s.listMovements))
 
+	mux.Handle("GET /api/labels/custom", h(s.customPreview))
 	mux.Handle("GET /api/labels/{code}", h(s.labelPreview))
 	mux.Handle("POST /api/print", h(s.print))
 	mux.Handle("GET /api/print/jobs", h(s.listPrintJobs))
