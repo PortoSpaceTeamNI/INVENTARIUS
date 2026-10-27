@@ -135,7 +135,11 @@ const (
 
 // validate checks the map and its shapes; locations are the known location
 // IDs and exists says whether a shape's link names something real.
-func (b *mapBody) validate(locations map[int64]bool, exists func(kind byte, id int64) (bool, error)) error {
+//
+// Only links that are new must name something real: a link already saved
+// (in known) may point at a place or item deleted since, and that must not
+// stop the rest of the map from saving.
+func (b *mapBody) validate(locations map[int64]bool, exists func(kind byte, id int64) (bool, error), known map[string]bool) error {
 	b.Name = strings.TrimSpace(b.Name)
 	if b.Name == "" {
 		return badRequest("name is required")
@@ -182,6 +186,10 @@ func (b *mapBody) validate(locations map[int64]bool, exists func(kind byte, id i
 		if err != nil {
 			return badRequest("links must be a code like L12, I5, S40, A7 or C3")
 		}
+		s.Link = fmt.Sprintf("%c%d", kind, id)
+		if known[s.Link] {
+			continue
+		}
 		if kind == 'L' && !locations[id] {
 			return badRequest("the linked thing does not exist")
 		}
@@ -194,7 +202,6 @@ func (b *mapBody) validate(locations map[int64]bool, exists func(kind byte, id i
 				return badRequest("the linked thing does not exist")
 			}
 		}
-		s.Link = fmt.Sprintf("%c%d", kind, id)
 	}
 	return nil
 }
@@ -243,7 +250,8 @@ func (s *Server) getMap(w http.ResponseWriter, r *http.Request, u *auth.User) er
 	return writeJSON(w, rm)
 }
 
-func (s *Server) decodeMap(r *http.Request) (mapBody, string, error) {
+// decodeMap reads and checks a map; known are the links the map already has.
+func (s *Server) decodeMap(r *http.Request, known map[string]bool) (mapBody, string, error) {
 	var b mapBody
 	if err := decode(r, &b); err != nil {
 		return b, "", err
@@ -253,7 +261,7 @@ func (s *Server) decodeMap(r *http.Request) (mapBody, string, error) {
 		return b, "", err
 	}
 	exists := func(kind byte, id int64) (bool, error) { return s.linkExists(r.Context(), kind, id) }
-	if err := b.validate(locs, exists); err != nil {
+	if err := b.validate(locs, exists, known); err != nil {
 		return b, "", err
 	}
 	shapes, err := json.Marshal(b.Shapes)
@@ -261,7 +269,7 @@ func (s *Server) decodeMap(r *http.Request) (mapBody, string, error) {
 }
 
 func (s *Server) createMap(w http.ResponseWriter, r *http.Request, u *auth.User) error {
-	b, shapes, err := s.decodeMap(r)
+	b, shapes, err := s.decodeMap(r, nil)
 	if err != nil {
 		return err
 	}
@@ -284,7 +292,19 @@ func (s *Server) updateMap(w http.ResponseWriter, r *http.Request, u *auth.User)
 	if err != nil {
 		return err
 	}
-	b, shapes, err := s.decodeMap(r)
+	stored, err := s.store.GetRoomMap(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	cur, err := toRoomMap(stored)
+	if err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	for _, sh := range cur.Shapes {
+		known[strings.ToUpper(sh.Link)] = true
+	}
+	b, shapes, err := s.decodeMap(r, known)
 	if err != nil {
 		return err
 	}
