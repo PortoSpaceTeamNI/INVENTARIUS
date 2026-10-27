@@ -565,3 +565,42 @@ func TestSearchWithoutAccentsOrSymbols(t *testing.T) {
 		t.Fatalf("place search: %+v", res.Locations)
 	}
 }
+
+func TestPrintCustomLabel(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("ana@portospaceteam.pt")
+
+	var jobs []db.PrintJob
+	admin.do("POST", "/api/print", map[string]any{"labels": []map[string]any{
+		{"text": "Ignition box\n\nKeep  dry"},
+		{"text": "Wiki", "qr": "https://example.com/Wiki"},
+		{"qr": "only a QR"},
+	}}, 200, &jobs)
+	if len(jobs) != 3 || jobs[0].Code != "~" || jobs[0].Caption != "Ignition box\nKeep dry" ||
+		jobs[1].Code != "~https://example.com/Wiki" || jobs[1].Caption != "Wiki" {
+		t.Fatalf("jobs %+v", jobs)
+	}
+	waitFor(t, "labels printed", func() bool { return len(e.printer.printed()) > 0 })
+	if got := e.printer.printed(); len(got) != 1 || got[0] != 3 {
+		t.Fatalf("print jobs %v, want one job of 3 labels", got)
+	}
+
+	for _, bad := range []map[string]any{
+		{"text": "  \n "},
+		{"text": "1\n2\n3\n4\n5"},
+		{"text": strings.Repeat("x", 201)},
+		{"qr": strings.Repeat("x", 301)},
+		{"text": "x", "qr": strings.Repeat("x", 250)}, // too big for 12 mm tape
+	} {
+		admin.do("POST", "/api/print", map[string]any{"labels": []any{bad}}, 400, nil)
+	}
+
+	resp, err := admin.c.Get(e.ts.URL + "/api/labels/custom?text=Hello&qr=x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("preview: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+}

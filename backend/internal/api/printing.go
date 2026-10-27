@@ -14,14 +14,32 @@ import (
 	"inventarius/internal/labels"
 )
 
+// customCode starts the code of a free-text print job, one that isn't tied
+// to anything in the inventory; the rest of the code is its QR content
+// ("" for none) and the caption its text. Real codes never start with it.
+const customCode = "~"
+
+// Limits for free-text labels (the error messages spell them out): the
+// content of a QR still has to fit the tape, which RenderText checks.
+const (
+	maxCustomText = 200
+	maxCustomQR   = 300
+)
+
 // RenderJob turns a stored print job into a label image for the loaded
 // tape; the print queue calls it right before printing.
 func (s *Server) RenderJob(j db.PrintJob, t labels.Tape) (image.Image, error) {
-	sym, err := labels.ParseSymbology(j.Symbology)
-	if err != nil {
-		return nil, err
+	var img *image.Gray
+	var err error
+	if qr, ok := strings.CutPrefix(j.Code, customCode); ok {
+		img, err = labels.RenderText(labels.Text{Lines: labels.TextLines(j.Caption), QR: qr}, t)
+	} else {
+		sym, perr := labels.ParseSymbology(j.Symbology)
+		if perr != nil {
+			return nil, perr
+		}
+		img, err = labels.Render(labels.Spec{Code: j.Code, Caption: j.Caption, Symbology: sym, URL: s.labelURL(j.Code)}, t)
 	}
-	img, err := labels.Render(labels.Spec{Code: j.Code, Caption: j.Caption, Symbology: sym, URL: s.labelURL(j.Code)}, t)
 	if err != nil {
 		return nil, err
 	}
@@ -94,12 +112,56 @@ func (s *Server) labelPreview(w http.ResponseWriter, r *http.Request, u *auth.Us
 	return png.Encode(w, labels.Preview(img, tape))
 }
 
+// customText checks the text and QR content of a free-text label and
+// returns the label to render.
+func customText(text, qr string) (labels.Text, error) {
+	qr = strings.TrimSpace(qr)
+	if len(text) > maxCustomText {
+		return labels.Text{}, badRequest("label text is limited to 200 characters")
+	}
+	if len(qr) > maxCustomQR {
+		return labels.Text{}, badRequest("QR content is limited to 300 characters")
+	}
+	l := labels.Text{Lines: labels.TextLines(text), QR: qr}
+	if len(l.Lines) == 0 && l.QR == "" {
+		return labels.Text{}, badRequest("write some text or QR content for the label")
+	}
+	if len(l.Lines) > labels.MaxTextLines {
+		return labels.Text{}, badRequest("a label has at most 4 lines of text")
+	}
+	return l, nil
+}
+
+// customPreview renders GET /api/labels/custom?text=...&qr=... like
+// labelPreview, for a free-text label.
+func (s *Server) customPreview(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	l, err := customText(r.URL.Query().Get("text"), r.URL.Query().Get("qr"))
+	if err != nil {
+		return err
+	}
+	tape, err := labels.TapeFor(s.queue.State().TapeMM)
+	if err != nil {
+		tape = labels.Tape12
+	}
+	img, err := labels.RenderText(l, tape)
+	if err != nil {
+		return badRequest(err.Error())
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, no-cache")
+	return png.Encode(w, labels.Preview(img, tape))
+}
+
+// print queues labels. Each is either a code, or a free-text label with
+// text and/or QR content and no code.
 func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	var b struct {
 		Labels []struct {
 			Code      string `json:"code"`
 			Symbology string `json:"symbology"`
 			Caption   string `json:"caption"`
+			Text      string `json:"text"`
+			QR        string `json:"qr"`
 		} `json:"labels"`
 	}
 	if err := decode(r, &b); err != nil {
@@ -110,6 +172,26 @@ func (s *Server) print(w http.ResponseWriter, r *http.Request, u *auth.User) err
 	}
 	var jobs []db.CreatePrintJobParams
 	for _, l := range b.Labels {
+		if l.Code == "" {
+			t, err := customText(l.Text, l.QR)
+			if err != nil {
+				return err
+			}
+			// Rendered now so a QR too big for the tape is refused here, not
+			// when the job fails at the printer.
+			tape, terr := labels.TapeFor(s.queue.State().TapeMM)
+			if terr != nil {
+				tape = labels.Tape12
+			}
+			if _, err := labels.RenderText(t, tape); err != nil {
+				return badRequest(err.Error())
+			}
+			jobs = append(jobs, db.CreatePrintJobParams{
+				// The symbology column only takes real symbologies.
+				Code: customCode + t.QR, Symbology: string(labels.QR), Caption: strings.Join(t.Lines, "\n"),
+			})
+			continue
+		}
 		k, id, err := codes.Parse(l.Code)
 		if err != nil {
 			return badRequest(err.Error())
