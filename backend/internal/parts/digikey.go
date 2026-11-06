@@ -85,7 +85,7 @@ func (d *DigiKey) base() string {
 
 func (d *DigiKey) client() *http.Client {
 	if d.Client == nil {
-		return &http.Client{Timeout: 15 * time.Second}
+		return Client
 	}
 	return d.Client
 }

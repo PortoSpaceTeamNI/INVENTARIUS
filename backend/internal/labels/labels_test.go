@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/makiuchi-d/gozxing"
@@ -192,4 +193,22 @@ func TestTextLines(t *testing.T) {
 	if fmt.Sprint(got) != "[Eletronica bancada 2]" {
 		t.Errorf("got %q", got)
 	}
+}
+
+// Label previews render concurrently, one request per label on the page.
+func TestPlainConcurrently(t *testing.T) {
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 2000 {
+				if got := plain("Eletrónica 10µF"); got != "Eletronica 10uF" {
+					t.Errorf("got %q", got)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }

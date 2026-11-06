@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // Part is what the catalogue knows about a component.
@@ -67,7 +66,7 @@ func (m *Mouser) Lookup(ctx context.Context, mpn string) (Part, error) {
 	}
 	client := m.Client
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = Client
 	}
 	body, _ := json.Marshal(map[string]any{
 		"SearchByPartRequest": map[string]string{"mouserPartNumber": mpn, "partSearchOptions": "Exact"},

@@ -5,11 +5,32 @@ package parts
 import (
 	"context"
 	"errors"
+	"net"
+	"net/http"
+	"net/url"
 	"strings"
+	"time"
 )
 
 // ErrNotFound means the catalogue has no part with that number.
 var ErrNotFound = errors.New("part not found")
+
+// Client talks to the distributors. The room PC's network is not always up,
+// so it gives up on connecting quickly; once connected, an answer may be slow.
+var Client = func() *http.Client {
+	const connect = 5 * time.Second
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = (&net.Dialer{Timeout: connect}).DialContext
+	t.TLSHandshakeTimeout = connect
+	return &http.Client{Timeout: 15 * time.Second, Transport: t}
+}()
+
+// Unreachable reports whether err means a distributor could not be talked to
+// at all (no internet, usually), rather than that it gave a bad answer.
+func Unreachable(err error) bool {
+	var u *url.Error
+	return errors.As(err, &u)
+}
 
 // Source is one distributor's catalogue.
 type Source interface {

@@ -265,7 +265,9 @@ function ItemForm({
       if (!item && photoUrl) {
         // The distributor's product photo; the item is fine without it.
         try {
-          const img = await fetch(`/api/parts/image?url=${encodeURIComponent(photoUrl)}`);
+          const img = await fetch(`/api/parts/image?url=${encodeURIComponent(photoUrl)}`, {
+            signal: AbortSignal.timeout(12_000),
+          });
           if (img.ok) await api("PUT", `/api/items/${saved.id}/photo`, await img.blob());
         } catch {
           // no photo

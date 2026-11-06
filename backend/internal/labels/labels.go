@@ -295,18 +295,17 @@ func drawText(img *image.Gray, x, y int, s string, k int) {
 
 // The label font is ASCII only: accents are dropped ("Eletrónica" →
 // "Eletronica") and a few symbols spelled out; anything else becomes "?".
-var (
-	stripMarks = transform.Chain(norm.NFKD, runes.Remove(runes.In(unicode.Mn)))
-	symbols    = map[rune]string{
-		'Ω': "Ohm", 'µ': "u", 'μ': "u", 'ß': "ss", 'Ø': "O", 'ø': "o",
-		'Æ': "AE", 'æ': "ae", 'Œ': "OE", 'œ': "oe", 'Ł': "L", 'ł': "l",
-		'°': "o", '±': "+/-", '×': "x", '÷': "/", '⁄': "/", '€': "EUR",
-		'–': "-", '—': "-", '‘': "'", '’': "'", '“': "\"", '”': "\"", '«': "\"", '»': "\"",
-		'…': "...", '•': "-", '·': "-",
-	}
-)
+var symbols = map[rune]string{
+	'Ω': "Ohm", 'µ': "u", 'μ': "u", 'ß': "ss", 'Ø': "O", 'ø': "o",
+	'Æ': "AE", 'æ': "ae", 'Œ': "OE", 'œ': "oe", 'Ł': "L", 'ł': "l",
+	'°': "o", '±': "+/-", '×': "x", '÷': "/", '⁄': "/", '€': "EUR",
+	'–': "-", '—': "-", '‘': "'", '’': "'", '“': "\"", '”': "\"", '«': "\"", '»': "\"",
+	'…': "...", '•': "-", '·': "-",
+}
 
 func plain(s string) string {
+	// A new one each time: a Chain keeps state, and labels render concurrently.
+	stripMarks := transform.Chain(norm.NFKD, runes.Remove(runes.In(unicode.Mn)))
 	if folded, _, err := transform.String(stripMarks, s); err == nil {
 		s = folded
 	}

@@ -85,6 +85,8 @@ func (a *Auth) provider(ctx context.Context) (*oauth2.Config, *oidc.IDTokenVerif
 	if a.oauth != nil {
 		return a.oauth, a.verifier, nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	p, err := oidc.NewProvider(ctx, "https://accounts.google.com")
 	if err != nil {
 		return nil, nil, err

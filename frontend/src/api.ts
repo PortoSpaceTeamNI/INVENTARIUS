@@ -303,15 +303,30 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * How long a read may wait. On a dropped Wi-Fi a request can hang for minutes
+ * and the page looks frozen. The part lookup asks the distributors in turn, so
+ * it gets longer. Writes have no limit: they may have gone through already.
+ */
+function readTimeout(path: string): number {
+  return path.startsWith("/api/parts") ? 60_000 : 15_000;
+}
+
 export async function api<T = void>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {} };
+  if (method === "GET") init.signal = AbortSignal.timeout(readTimeout(path));
   if (body instanceof Blob || typeof body === "string") {
     init.body = body;
   } else if (body !== undefined) {
     init.body = JSON.stringify(body);
     (init.headers as Record<string, string>)["Content-Type"] = "application/json";
   }
-  const res = await fetch(path, init);
+  let res: Response;
+  try {
+    res = await fetch(path, init);
+  } catch {
+    throw new ApiError(503, "check this device is on the same network as the PC");
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try {

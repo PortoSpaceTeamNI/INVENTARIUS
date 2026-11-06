@@ -79,3 +79,16 @@ func TestMouserNotFoundAndErrors(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestMouserUnreachable(t *testing.T) {
+	ts := httptest.NewServer(http.NotFoundHandler())
+	ts.Close() // nothing listens there now
+	m := &Mouser{APIKey: "KEY", BaseURL: ts.URL}
+	_, err := m.Lookup(context.Background(), "LM358P")
+	if !Unreachable(err) {
+		t.Fatalf("err = %v, want unreachable", err)
+	}
+	if Unreachable(ErrNotFound) {
+		t.Fatal("ErrNotFound counted as unreachable")
+	}
+}

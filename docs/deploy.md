@@ -63,6 +63,22 @@ Set `INVENTARIUS_DEV_AUTH=true` and **do not start the tunnel**. Then use the ap
 itself at http://localhost:8080. Dev login has no password: anyone who can reach the page can
 sign in as anyone with a `@portospaceteam.pt` address.
 
+## Without internet
+
+Everything runs on the PC, so the app keeps working when the internet is down: browsing, scanning,
+stock, printing and backups. Only these need internet:
+
+- the part lookup and product photos from Mouser and DigiKey (it says so; fill in the details by hand),
+- datasheet and supplier links, and Google sign-in,
+- building a new image. `make up` then starts the image already built.
+
+Phones still need a network shared with the PC, even one with no internet. The PC's address changes
+with the network: `ip -4 addr` shows it.
+
+If the page stops answering on a phone but works at http://localhost:8080 on the PC, the app is fine
+and the problem is the network: the PC may have moved to another Wi-Fi, which changes its address. A
+network cable or a fixed connection avoids this.
+
 ## Configuration
 
 All settings are `INVENTARIUS_*` environment variables in `.env`; `env.example` documents them.

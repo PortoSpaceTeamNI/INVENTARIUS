@@ -10,6 +10,8 @@ const exact: Record<string, string> = {
   "no such endpoint": "Endereço inexistente.",
   "invalid reference or value": "Referência ou valor inválido.",
   "internal error": "Erro interno do servidor.",
+  "check this device is on the same network as the PC":
+    "Confirma que este dispositivo está na mesma rede que o PC.",
   "name is required": "O nome é obrigatório.",
   "only its owners can change this": "Só os donos podem alterar isto.",
   "only its department, the person who reserved it, or an admin can release it":
@@ -104,6 +106,8 @@ const exact: Record<string, string> = {
     'não se pode reservar "all" de um lote não contado; indica um número',
   "reserve whole units": "reserva unidades inteiras",
   // part lookup
+  "can't reach the distributors (no internet?): fill in the details by hand":
+    "Não foi possível contactar os distribuidores (sem internet?): preenche os dados à mão.",
   "part not found at the distributors": "Os distribuidores não conhecem esta referência.",
   "part lookup is not set up (INVENTARIUS_MOUSER_API_KEY or INVENTARIUS_DIGIKEY_CLIENT_ID/SECRET)":
     "A pesquisa de componentes não está configurada (INVENTARIUS_MOUSER_API_KEY ou INVENTARIUS_DIGIKEY_CLIENT_ID/SECRET).",

@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"inventarius/internal/auth"
 	"inventarius/internal/db"
@@ -35,6 +34,10 @@ func (s *Server) partLookup(w http.ResponseWriter, r *http.Request, u *auth.User
 	p, err := s.parts.Prefer(r.URL.Query().Get("prefer")).Lookup(r.Context(), mpn)
 	if errors.Is(err, parts.ErrNotFound) {
 		return &httpError{http.StatusNotFound, "part not found at the distributors"}
+	} else if parts.Unreachable(err) {
+		// Not err's text: it holds the request's URL, with Mouser's API key.
+		slog.Warn("part lookup: distributors unreachable")
+		return &httpError{http.StatusServiceUnavailable, "can't reach the distributors (no internet?): fill in the details by hand"}
 	} else if err != nil {
 		if strings.Contains(err.Error(), "Invalid unique identifier") {
 			return &httpError{http.StatusBadGateway, "the Mouser API key is not valid"}
@@ -139,7 +142,7 @@ func fetchImage(r *http.Request, u, referer string) (*http.Response, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36")
 	req.Header.Set("Accept", "image/jpeg,image/png,image/*;q=0.8")
 	req.Header.Set("Referer", referer)
-	res, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	res, err := parts.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}

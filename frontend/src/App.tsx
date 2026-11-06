@@ -18,7 +18,7 @@ import { ApiError, get, type OpenLoan, type User } from "./api";
 import { SearchPaletteProvider, useOpenSearch } from "./components/SearchPalette";
 import { BrandMark, Loading } from "./components/ui";
 import { LangToggle, useT } from "./i18n";
-import { useMe } from "./lib";
+import { errorMessage, useMe } from "./lib";
 import { AssetPage } from "./pages/AssetPage";
 import { CodePage } from "./pages/CodePage";
 import { HomePage } from "./pages/HomePage";
@@ -103,7 +103,7 @@ function SignedIn() {
     }
     return (
       <div className="content">
-        <div className="alert alert-danger">{t.common.cannotReach(me.error.message)}</div>
+        <div className="alert alert-danger">{t.common.cannotReach(errorMessage(me.error))}</div>
       </div>
     );
   }

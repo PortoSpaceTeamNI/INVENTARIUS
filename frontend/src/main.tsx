@@ -10,10 +10,14 @@ import "./styles.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
+    // The app is served by the room PC, so it can be reached when the browser
+    // thinks it's offline. The default would freeze until the internet is back.
     queries: {
+      networkMode: "always",
       staleTime: 10_000,
       retry: (n, e) => !(e instanceof ApiError && e.status < 500) && n < 2,
     },
+    mutations: { networkMode: "always" },
   },
 });
 

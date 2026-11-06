@@ -42,7 +42,8 @@ docker:
 	docker build -t inventarius .
 
 up:
-	cd deploy && docker compose up -d --build
+	cd deploy && (docker compose up -d --build || \
+		(echo "Could not build (no internet?): starting the image already built."; docker compose up -d))
 
 down:
 	cd deploy && docker compose down
